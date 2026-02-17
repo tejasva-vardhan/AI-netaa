@@ -1,0 +1,63 @@
+.location-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: var(--background);
+}
+
+.location-header {
+  background: var(--surface);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.location-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.location-content {
+  flex: 1;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.loading-subtext {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+
+.location-coords {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  font-family: monospace;
+}
+
+.location-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.location-footer {
+  text-align: center;
+  padding: 16px;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  font-size: 14px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 8px;
+}

@@ -1,0 +1,122 @@
+/* Status timeline – theme-aligned, institutional */
+
+.status-timeline {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid var(--border);
+}
+
+.timeline-empty {
+  text-align: center;
+  padding: 28px 16px;
+  color: var(--text-secondary);
+}
+
+.timeline-empty p {
+  margin: 0 0 4px 0;
+  font-size: 15px;
+}
+
+.timeline-empty-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+  opacity: 0.9;
+}
+
+.timeline-item {
+  display: flex;
+  gap: 16px;
+  padding-bottom: 20px;
+  position: relative;
+}
+
+.timeline-item:last-child {
+  padding-bottom: 0;
+}
+
+.timeline-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 26px;
+  bottom: -20px;
+  width: 2px;
+  background: var(--primary-color);
+  opacity: 0.4;
+}
+
+.timeline-marker {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+.timeline-marker--authority {
+  background: var(--primary-color);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--primary-color);
+}
+
+.timeline-marker--user {
+  background: var(--text-secondary);
+  opacity: 0.9;
+}
+
+.timeline-marker--system {
+  background: var(--primary-color);
+}
+
+.timeline-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.timeline-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.status-old {
+  color: var(--text-secondary);
+  font-size: 14px;
+  text-transform: capitalize;
+}
+
+.status-arrow {
+  color: var(--text-secondary);
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.status-new {
+  color: var(--primary-color);
+  font-weight: 600;
+  font-size: 14px;
+  text-transform: capitalize;
+}
+
+.timeline-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+.timeline-notes {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  line-height: 1.45;
+}

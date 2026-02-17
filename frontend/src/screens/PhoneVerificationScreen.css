@@ -1,0 +1,82 @@
+.phone-verification-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  background: var(--background);
+}
+
+.phone-verification-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.phone-verification-header h2 {
+  margin-left: 16px;
+  font-size: 20px;
+}
+
+.phone-verification-content {
+  flex: 1;
+  max-width: 400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.phone-form,
+.otp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.form-hint {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.otp-input {
+  text-align: center;
+  font-size: 24px;
+  letter-spacing: 8px;
+  font-weight: 600;
+}
+
+.otp-sent-message {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.resend-otp {
+  text-align: center;
+  margin-top: 16px;
+}
+
+.countdown {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.verifying {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.verifying p {
+  font-size: 16px;
+  color: var(--text-primary);
+}

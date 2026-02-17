@@ -1,0 +1,119 @@
+.complaint-detail-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: var(--background);
+}
+
+.complaint-header {
+  background: var(--surface);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.complaint-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.complaint-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.complaint-detail-inner {
+  width: 100%;
+  max-width: 640px;
+}
+
+.complaint-section {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+}
+
+.complaint-hero {
+  border-left: 4px solid var(--primary-color);
+}
+
+.complaint-number-large {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.status-badge-large {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: white;
+  text-transform: capitalize;
+}
+
+.complaint-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.complaint-section p {
+  font-size: 16px;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.priority-text {
+  text-transform: capitalize;
+  font-weight: 500;
+}
+
+.attachments-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.attachment-image {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.complaint-actions {
+  margin-top: 24px;
+}
+
+.timeline-container {
+  margin-top: 16px;
+  width: 100%;
+}
+
+.complaint-detail-inner .loading {
+  padding: 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.error-container {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
