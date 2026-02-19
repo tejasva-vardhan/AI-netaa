@@ -24,13 +24,13 @@ function PhoneVerificationScreen() {
     const phoneVerified = localStorage.getItem('phone_verified') === 'true';
 
     if (phoneVerified && verifiedUserID && verifiedPhone) {
-      // Already verified: go to chat (new flow) or review if resuming a full draft
+      // Already verified: go to chat (new flow) or show confirmation if resuming a full draft
       const hasFullDraft = complaintData.summary && complaintData.description && complaintData.location && complaintData.photo;
       if (hasFullDraft) {
-        updateComplaintData({ step: 'review' });
-        navigate('/review');
+        updateComplaintData({ step: 'confirmation' });
+        navigate('/chat-legacy');
       } else {
-        navigate('/chat');
+        navigate('/chat-legacy');
       }
       return;
     }
@@ -170,17 +170,17 @@ function PhoneVerificationScreen() {
       localStorage.setItem('phone_verified', 'true');
       localStorage.setItem('phone_verified_at', new Date().toISOString());
 
-      // Update complaint data; then chat (new flow) or review if resuming full draft
+      // Update complaint data; then chat (new flow) or show confirmation if resuming full draft
       updateComplaintData({ 
         userPhone: cleanPhone,
         userID: result.user_id
       });
       const hasFullDraft = complaintData.summary && complaintData.description && complaintData.location && complaintData.photo;
       if (hasFullDraft) {
-        updateComplaintData({ step: 'review' });
-        navigate('/review');
+        updateComplaintData({ step: 'confirmation' });
+        navigate('/chat-legacy');
       } else {
-        navigate('/chat');
+        navigate('/chat-legacy');
       }
     } catch (err) {
       // Display backend error message or fallback

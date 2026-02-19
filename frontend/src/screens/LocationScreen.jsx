@@ -1,30 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useComplaintState } from '../state/ComplaintContext';
+import { getRandomPhrase } from '../utils/botPhrases';
 import './LocationScreen.css';
 
 function LocationScreen() {
   const navigate = useNavigate();
-  const { complaintData, updateComplaintData, addMessage } = useComplaintState();
+  const { complaintData, updateComplaintData, addMessage, goToStepRef } = useComplaintState();
   const [location, setLocation] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [permissionRequested, setPermissionRequested] = useState(false);
   const [showExplanation, setShowExplanation] = useState(true); // ISSUE 2: Show explanation first
+  const [guidanceShown, setGuidanceShown] = useState(false); // Prevent duplicate guidance messages
 
   useEffect(() => {
-    // ISSUE 5: Defensive validation - ensure we should be on this screen
+    // STRICT VALIDATION: Only allow if prerequisites met
     if (!complaintData.summary || !complaintData.description) {
-      navigate('/chat');
+      navigate('/chat-legacy');
       return;
     }
     
-    if (complaintData.step === 'camera' || complaintData.step === 'phone-verify' || complaintData.step === 'review') {
-      navigate(`/${complaintData.step}`);
-      return;
-    }
-    
-    // ISSUE 2: Don't auto-request location - wait for user to click button after reading explanation
     // If location already exists, show success state
     if (complaintData.location) {
       setLocation(complaintData.location);
@@ -32,16 +28,37 @@ function LocationScreen() {
   }, []);
 
   const requestLocation = async () => {
-    // ISSUE 2: Hide explanation and show loading when user clicks
+    // Hide explanation and show loading when user clicks
     setShowExplanation(false);
     setLoading(true);
     setError(null);
     setPermissionRequested(true);
 
-    if (!navigator.geolocation) {
+      if (!navigator.geolocation) {
       setError('Aapke browser mein geolocation support nahi hai.');
       setLoading(false);
+      // Offer manual entry fallback
+      addMessage({
+        type: 'bot',
+        text: `${getRandomPhrase('acknowledge')}, aap area ka naam bata dijiye.`,
+        timestamp: new Date()
+      });
       return;
+    }
+
+    // Show guidance message before requesting permission
+    if (!guidanceShown) {
+      addMessage({
+        type: 'bot',
+        text: 'Aapki location chahiye taaki main sahi jagah tak complaint bhej sakoon.',
+        timestamp: new Date()
+      });
+      addMessage({
+        type: 'bot',
+        text: 'Please location ON kar dijiye.',
+        timestamp: new Date()
+      });
+      setGuidanceShown(true);
     }
 
     navigator.geolocation.getCurrentPosition(
@@ -53,25 +70,37 @@ function LocationScreen() {
         };
         setLocation(loc);
         const completedSteps = complaintData.completedSteps || [];
+        // Update state
         updateComplaintData({ 
           location: loc,
-          step: 'camera',
           completedSteps: [...completedSteps, 'location']
         });
-        addMessage({ type: 'system', text: 'Location confirm ho gayi.', timestamp: new Date() });
         setLoading(false);
         
-        // Automatically transition to camera after 2 seconds (give user time to see success)
+        // EVENT-DRIVEN: Direct step transition on async completion
         setTimeout(() => {
-          navigate('/camera');
-        }, 2000);
+          navigate('/chat-legacy');
+          if (goToStepRef?.current) {
+            goToStepRef.current('location_confirm');
+          }
+        }, 1000);
       },
       (err) => {
         let errorMsg = 'Location access deny ho gaya.';
         if (err.code === 1) {
           errorMsg = 'Location permission deny. Browser settings mein allow karein.';
+          addMessage({
+            type: 'bot',
+            text: `${getRandomPhrase('acknowledge')}, aap area ka naam bata dijiye.`,
+            timestamp: new Date()
+          });
         } else if (err.code === 2) {
           errorMsg = 'Location unavailable. GPS check karein.';
+          addMessage({
+            type: 'bot',
+            text: `${getRandomPhrase('acknowledge')}, aap area ka naam bata dijiye.`,
+            timestamp: new Date()
+          });
         } else if (err.code === 3) {
           errorMsg = 'Location request timeout. Phir se try karein.';
         }
@@ -91,27 +120,26 @@ function LocationScreen() {
     alert('Manual address abhi available nahi. Location access allow karein.');
   };
 
-  const handleContinue = () => {
-    if (location) {
-      const completedSteps = complaintData.completedSteps || [];
-      updateComplaintData({ 
-        step: 'camera',
-        completedSteps: [...completedSteps, 'location']
-      });
-      addMessage({ type: 'system', text: 'Location confirm ho gayi.', timestamp: new Date() });
-      navigate('/camera');
-    } else {
-      setError('Location access allow karein ya manually enter karein.');
-    }
-  };
+  // Auto-proceed when location is manually set via handleContinue (if user clicks continue)
+  // Note: GPS capture already auto-proceeds, this handles manual "continue" case
+  // But we're removing the button, so this is just for edge cases
 
   const handleSkip = () => {
     const completedSteps = complaintData.completedSteps || [];
+    // Update state
     updateComplaintData({ 
-      step: 'camera',
-      completedSteps: [...completedSteps, 'location']
+      completedSteps: [...completedSteps, 'location', 'location_confirm']
     });
+    addMessage({ 
+      type: 'bot', 
+      text: 'Aapki di hui jaankari ke base par aage badh raha hoon.', 
+      timestamp: new Date() 
+    });
+    // EVENT-DRIVEN: Direct step transition on skip
     navigate('/camera');
+    if (goToStepRef?.current) {
+      goToStepRef.current('photo');
+    }
   };
 
   return (
@@ -120,7 +148,7 @@ function LocationScreen() {
         <button type="button" className="back-button" onClick={() => navigate('/chat')}>
           Back
         </button>
-        <h2>Location</h2>
+        <h2>Aap Kahan Hain</h2>
       </div>
 
       <div className="location-content">
@@ -134,18 +162,18 @@ function LocationScreen() {
             marginBottom: '24px'
           }}>
             <p style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px' }}>
-              Aapke phone ki location chahiye
+              Aap yahin ke rehne wale hain na?
             </p>
             <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-              Taaki complaint sahi jagah tak pahunche.
+              Location share kar dijiye, taaki main samajh sakoon kahan ki problem hai.
             </p>
           </div>
         )}
 
         {loading && !error && (
           <div className="loading">
-            <p>Location confirm ho rahi hai…</p>
-            <p className="loading-subtext">Location permission allow karein.</p>
+            <p>Location dekh raha hoon…</p>
+            <p className="loading-subtext">Location permission allow kar dijiye.</p>
           </div>
         )}
 
@@ -153,19 +181,19 @@ function LocationScreen() {
           <div className="error">
             <p>{error}</p>
             <p className="error-subtext" style={{ fontSize: '14px', marginTop: '8px' }}>
-              Manually location enter karein ya skip karein.
+              Ya phir skip karke aage badh sakte hain.
             </p>
           </div>
         )}
 
         {location && !loading && (
           <div className="success">
-            <p>Location capture ho gaya.</p>
+            <p>Location mil gaya, dhanyavaad!</p>
             <p className="location-coords" style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '8px' }}>
               Lat: {location.latitude.toFixed(6)}, Lng: {location.longitude.toFixed(6)}
             </p>
             <p className="success-subtext" style={{ fontSize: '14px', marginTop: '12px' }}>
-              Ab photo capture par ja rahe hain.
+              Agar possible ho toh ek photo bhej dijiye, isse madad milegi.
             </p>
           </div>
         )}
@@ -178,7 +206,7 @@ function LocationScreen() {
                 onClick={requestLocation}
                 disabled={loading || showExplanation === false}
               >
-                {showExplanation ? 'Allow Location' : 'Location confirm ho rahi hai…'}
+                {showExplanation ? 'Location Share Kar Dein' : 'Location dekh raha hoon…'}
               </button>
               {error && (
                 <button
@@ -191,22 +219,17 @@ function LocationScreen() {
                   disabled={loading}
                   style={{ marginTop: '8px' }}
                 >
-                  Try Again
+                  Phir Se Try Karein
                 </button>
               )}
             </>
           )}
 
-          {location && (
-            <button className="btn btn-primary" onClick={handleContinue}>
-              Continue
-            </button>
-          )}
         </div>
 
         <div className="location-footer">
           <button className="link-button" onClick={handleSkip}>
-            Skip Location
+            Abhi Skip Kar Dein
           </button>
         </div>
       </div>

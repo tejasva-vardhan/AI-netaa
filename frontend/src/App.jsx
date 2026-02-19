@@ -7,7 +7,6 @@ import ChatScreen from './screens/ChatScreen';
 import CameraScreen from './screens/CameraScreen';
 import LocationScreen from './screens/LocationScreen';
 import PhoneVerificationScreen from './screens/PhoneVerificationScreen';
-import ReviewScreen from './screens/ReviewScreen';
 import ComplaintsListScreen from './screens/ComplaintsListScreen';
 import ComplaintDetailScreen from './screens/ComplaintDetailScreen';
 import AuthorityLayout, { AuthorityIndexRedirect } from './screens/authority/AuthorityLayout';
@@ -71,7 +70,7 @@ function App() {
             <Route path="/camera" element={<CameraScreen />} />
             <Route path="/location" element={<LocationScreen />} />
             <Route path="/phone-verify" element={<PhoneVerificationScreen />} />
-            <Route path="/review" element={<ReviewScreen />} />
+            <Route path="/review" element={<Navigate to="/chat-legacy" replace />} />
             <Route path="/complaints" element={isAuthenticated ? <ComplaintsListScreen /> : <Navigate to="/login" replace />} />
             <Route path="/complaint/:id" element={isAuthenticated ? <ComplaintStatus /> : <Navigate to="/login" replace />} />
             <Route path="/complaints/:id" element={isAuthenticated ? <ComplaintTracker /> : <Navigate to="/login" replace />} />

@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 import api from '../services/api';
 import DepartmentRouter from '../services/departmentRouter';
+import { ensureCategory } from '../utils/categoryInference';
+import { getRandomPhrase } from '../utils/botPhrases';
 
 const initialMessage = {
   id: '1',
-  text: 'Namaste! Main aapka AI NETA hoon. Kya problem hai? Aap mujhe bata sakte hain.',
+  text: 'Namaste! Main aapka AI NETA hoon. Aap bataiye, kya dikkat hai?',
   sender: 'ai',
   timestamp: new Date(),
   step: 'problem'
@@ -44,30 +46,26 @@ export const useChatStore = create((set, get) => ({
 
     switch (currentStep) {
       case 'problem':
-        aiResponse = 'Dhanyavaad! Kahan ki problem hai? Kripya location share karein.';
+        aiResponse = `${getRandomPhrase('understood')}. Ab bataiye kahan ki problem hai?`;
         set({ currentStep: 'location' });
         break;
       case 'location':
-        aiResponse = 'Kripya complaint ke liye department chuniye. Neeche list se select karein.';
-        set({ currentStep: 'department' });
-        break;
-      case 'department':
-        aiResponse = 'Dhanyavaad! Ab kya aap problem ki photo bhej sakte hain?';
+        aiResponse = 'Aap yahin ke rehne wale hain na? Location share kar dijiye.';
         set({ currentStep: 'photo' });
         break;
       case 'photo':
-        aiResponse = 'Bahut accha. Kya aap voice me batana chahenge? Aap record kar sakte hain.';
+        aiResponse = 'Bahut accha photo mila. Kya aap voice me bhi batana chahenge?';
         set({ currentStep: 'voice' });
         break;
       case 'voice':
-        aiResponse = 'Dhanyavaad! Main aapki complaint process kar raha hoon. Ek minute.';
+        aiResponse = 'Dhanyavaad! Main ab ise sahi adhikari tak pahucha raha hoon. Ek minute.';
         set({ currentStep: 'processing' });
         setTimeout(() => {
           get().submitComplaint();
         }, 2000);
         break;
       default:
-        aiResponse = 'Main aapki complaint track kar raha hoon.';
+        aiResponse = 'Main aapki complaint dekh raha hoon.';
     }
 
     const aiMessage = {
@@ -89,7 +87,7 @@ export const useChatStore = create((set, get) => ({
 
     const locationMessage = {
       id: Date.now().toString(),
-      text: `📍 Location shared: ${address || 'Location captured'}`,
+      text: `📍 ${address || 'Yahin se'}`,
       sender: 'user',
       timestamp: new Date(),
       type: 'location'
@@ -97,13 +95,13 @@ export const useChatStore = create((set, get) => ({
 
     set((state) => ({
       messages: [...state.messages, locationMessage],
-      currentStep: 'department'
+      currentStep: 'photo'
     }));
 
     setTimeout(() => {
       const aiMessage = {
         id: (Date.now() + 1).toString(),
-        text: 'Location mil gayi. Ab neeche se department chuniye (विभाग चुनें).',
+        text: 'Achha, location mil gayi. Ab agar possible ho toh ek photo bhej dijiye.',
         sender: 'ai',
         timestamp: new Date()
       };
@@ -125,21 +123,11 @@ export const useChatStore = create((set, get) => ({
       timestamp: new Date(),
       type: 'department'
     };
+    // Department selection removed from UI - backend will auto-assign based on category
+    // Keep this function for backward compatibility but don't show UI
     set((state) => ({
-      messages: [...state.messages, deptMessage],
       currentStep: 'photo'
     }));
-    setTimeout(() => {
-      const aiMessage = {
-        id: (Date.now() + 1).toString(),
-        text: 'Department select ho gaya. Ab photo bhejiye.',
-        sender: 'ai',
-        timestamp: new Date()
-      };
-      set((state) => ({
-        messages: [...state.messages, aiMessage]
-      }));
-    }, 500);
   },
 
   uploadPhoto: async (photoBlob) => {
@@ -155,7 +143,7 @@ export const useChatStore = create((set, get) => ({
 
       const photoMessage = {
         id: Date.now().toString(),
-        text: '📸 Photo captured',
+        text: '📸 Photo bhej diya',
         sender: 'user',
         timestamp: new Date(),
         type: 'photo',
@@ -170,7 +158,7 @@ export const useChatStore = create((set, get) => ({
       setTimeout(() => {
         const aiMessage = {
           id: (Date.now() + 1).toString(),
-          text: 'Photo mil gayi. Ab voice record karein ya text mein bata dein.',
+          text: 'Photo mil gayi, dhanyavaad! Ab agar chahe toh voice me bhi bata sakte hain.',
           sender: 'ai',
           timestamp: new Date()
         };
@@ -195,7 +183,7 @@ export const useChatStore = create((set, get) => ({
 
       const voiceMessage = {
         id: Date.now().toString(),
-        text: '🎤 Voice note recorded',
+        text: '🎤 Voice message bhej diya',
         sender: 'user',
         timestamp: new Date(),
         type: 'voice'
@@ -223,23 +211,47 @@ export const useChatStore = create((set, get) => ({
     try {
       const { complaintData } = get();
 
+      // Ensure category is ALWAYS set (infer from problem text if missing)
+      const finalCategory = ensureCategory(complaintData.category, complaintData.problem);
+      
+      // Update complaintData with inferred category if it was missing
+      if (!complaintData.category || complaintData.category.trim() === '') {
+        set((state) => ({
+          complaintData: { ...state.complaintData, category: finalCategory }
+        }));
+      }
+
       const seriousKeywords = /बहुत गंभीर|जान का खतरा|urgent|critical|गंभीर|खतरा/i;
       const isSerious = complaintData.problem && seriousKeywords.test(complaintData.problem);
       const complaintForRouter = {
         ...complaintData,
+        category: finalCategory, // Use ensured category
         severity: complaintData.severity || (isSerious ? 'high' : 'normal'),
         escalationLevel: complaintData.escalationLevel || (isSerious ? 2 : 0)
       };
       const recipients = DepartmentRouter.getRecipients(complaintForRouter);
       if (import.meta.env.DEV) {
         console.log('📧 [Department Routing] Recipients:', recipients);
-        console.log('📍 Area:', complaintData.location?.area, '| Dept:', complaintData.selectedDepartment, '| Severity:', complaintForRouter.severity);
+        console.log('📍 Area:', complaintData.location?.area, '| Dept:', complaintData.selectedDepartment, '| Category:', finalCategory, '| Severity:', complaintForRouter.severity);
+      }
+
+      // Show message if category is "general"
+      if (finalCategory === 'general') {
+        const generalMessage = {
+          id: (Date.now() - 1).toString(),
+          text: 'Main ise uchit adhikari tak pahucha raha hoon.',
+          sender: 'ai',
+          timestamp: new Date()
+        };
+        set((state) => ({
+          messages: [...state.messages, generalMessage]
+        }));
       }
 
       const payload = {
         summary: complaintData.problem,
         description: complaintData.address || complaintData.problem,
-        category: complaintData.category || '',
+        category: finalCategory, // ALWAYS set (never null/empty)
         location: complaintData.location
           ? { latitude: complaintData.location.lat, longitude: complaintData.location.lng }
           : null,
@@ -257,9 +269,13 @@ export const useChatStore = create((set, get) => ({
       const complaintId = data?.complaint_id ?? data?.id ?? null;
       const voiceBlobToUpload = get().complaintData.voiceBlob || null;
 
+      const successMessageText = complaintNumber && complaintNumber !== '—'
+        ? `Ho gaya.\n\nMaine aapki problem sahi adhikari tak pahucha di hai.\n\nAapko updates milte rahenge.\n\nComplaint ID: ${complaintNumber}`
+        : `Ho gaya.\n\nMaine aapki problem sahi adhikari tak pahucha di hai.\n\nAapko updates milte rahenge.`;
+      
       const successMessage = {
         id: Date.now().toString(),
-        text: `✅ Complaint #${complaintNumber} registered! Sent to ${recipients.length} department(s). Main ab ise track karunga.`,
+        text: successMessageText,
         sender: 'ai',
         timestamp: new Date()
       };
@@ -281,7 +297,7 @@ export const useChatStore = create((set, get) => ({
               ...state.messages,
               {
                 id: Date.now().toString(),
-                text: 'Voice note safely attached.',
+                text: 'Voice message bhi attach ho gaya.',
                 sender: 'ai',
                 timestamp: new Date()
               }
@@ -296,7 +312,7 @@ export const useChatStore = create((set, get) => ({
 
       const errorMessage = {
         id: Date.now().toString(),
-        text: 'Complaint submit nahi ho payi. Kripya phir se koshish karein.',
+        text: 'Maaf kijiye, complaint submit nahi ho payi. Thoda wait karke phir se try karein.',
         sender: 'ai',
         timestamp: new Date()
       };

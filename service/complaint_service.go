@@ -102,34 +102,47 @@ func (s *ComplaintService) CreateComplaint(
 		complaint.DeviceFingerprint = sql.NullString{String: *req.DeviceFingerprint, Valid: true}
 	}
 
-	// Auto-assign department based on category (if category provided)
+	// Auto-assign department based on category (ALWAYS assign, fallback to default)
+	// Default department: ID 7 (District Collector Office)
+	const defaultDepartmentID int64 = 7
+	var assignedDeptID int64 = defaultDepartmentID
+	var priorityOverride *string
+
+	// Try to get department from category mapping if category provided
 	if req.Category != nil && *req.Category != "" && s.departmentRepo != nil {
-		deptID, priorityOverride, err := s.departmentRepo.GetDepartmentByCategoryAndLocation(
+		deptID, prioOverride, err := s.departmentRepo.GetDepartmentByCategoryAndLocation(
 			*req.Category,
 			req.LocationID,
 		)
 		if err == nil && deptID != nil {
-			complaint.AssignedDepartmentID = sql.NullInt64{Int64: *deptID, Valid: true}
-			
-			// Override priority if category mapping specifies it
-			if priorityOverride != nil {
-				switch *priorityOverride {
-				case "low":
-					priority = models.PriorityLow
-				case "medium":
-					priority = models.PriorityMedium
-				case "high":
-					priority = models.PriorityHigh
-				case "urgent":
-					priority = models.PriorityUrgent
-				}
-			}
-			
-			// Try to find an officer for this department and location
-			officerID, err := s.departmentRepo.FindOfficerForDepartment(*deptID, req.LocationID)
-			if err == nil && officerID != nil {
-				complaint.AssignedOfficerID = sql.NullInt64{Int64: *officerID, Valid: true}
-			}
+			assignedDeptID = *deptID
+			priorityOverride = prioOverride
+		}
+		// If mapping fails, assignedDeptID remains defaultDepartmentID (fallback)
+	}
+
+	// ALWAYS assign department (either from category mapping or default)
+	complaint.AssignedDepartmentID = sql.NullInt64{Int64: assignedDeptID, Valid: true}
+
+	// Override priority if category mapping specifies it
+	if priorityOverride != nil {
+		switch *priorityOverride {
+		case "low":
+			priority = models.PriorityLow
+		case "medium":
+			priority = models.PriorityMedium
+		case "high":
+			priority = models.PriorityHigh
+		case "urgent":
+			priority = models.PriorityUrgent
+		}
+	}
+
+	// Try to find an officer for this department and location (optional)
+	if s.departmentRepo != nil {
+		officerID, err := s.departmentRepo.FindOfficerForDepartment(assignedDeptID, req.LocationID)
+		if err == nil && officerID != nil {
+			complaint.AssignedOfficerID = sql.NullInt64{Int64: *officerID, Valid: true}
 		}
 	}
 

@@ -1,4 +1,6 @@
 // API service - integrated with backend
+import { ensureCategory } from '../utils/categoryInference';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
 
 class ApiError extends Error {
@@ -145,7 +147,7 @@ export const api = {
     const phoneVerified = localStorage.getItem('phone_verified') === 'true';
     
     if (!token || !phoneVerified) {
-      throw new ApiError('Please verify your phone number to submit complaint', 401, 'PHONE_NOT_VERIFIED');
+      throw new ApiError('Pehle phone verify kar lein, phir complaint bhej sakte hain.', 401, 'PHONE_NOT_VERIFIED');
     }
     
     // Log token presence for debugging (don't log actual token)
@@ -170,7 +172,7 @@ export const api = {
         console.error('Photo upload failed:', err);
         // ISSUE 1: Don't continue without photo - throw error to block submission
         throw new ApiError(
-          'Failed to upload photo. Please try again or capture a new photo.',
+          'Photo upload nahi ho paya. Phir se try karein ya naya photo bhejiye.',
           400,
           'PHOTO_UPLOAD_FAILED'
         );
@@ -183,7 +185,7 @@ export const api = {
       // ISSUE 1: No photo at all - this should be caught by ReviewScreen validation, but double-check
       console.error('No photo found in complaintData:', complaintData.photo);
       throw new ApiError(
-        'Photo is required for live proof. Please capture a photo.',
+        'Agar possible ho toh ek photo bhej dijiye, isse madad milegi.',
         400,
         'PHOTO_MISSING'
       );
@@ -194,10 +196,13 @@ export const api = {
     const lng = complaintData.location?.longitude ?? complaintData.location?.lng ?? null;
 
     // ISSUE 4: Map frontend complaint data to backend API format
+    // Ensure category is ALWAYS set (never null/undefined/empty)
+    const category = ensureCategory(complaintData.category, complaintData.summary || complaintData.description || '');
+    
     const requestBody = {
       title: complaintData.summary,
       description: complaintData.description,
-      category: complaintData.category || null,
+      category: category, // ALWAYS set (defaults to "general" if missing)
       location_id: complaintData.location?.location_id || 1,
       latitude: lat,
       longitude: lng,
@@ -349,7 +354,7 @@ export const api = {
       
       // ISSUE 1: Store JWT token for authenticated requests
       if (!response.token) {
-        throw new ApiError('Backend did not return authentication token. Please try again.', 500, 'NO_TOKEN');
+        throw new ApiError('Kuch problem ho gayi. Phir se try karein.', 500, 'NO_TOKEN');
       }
       
       localStorage.setItem('auth_token', response.token);

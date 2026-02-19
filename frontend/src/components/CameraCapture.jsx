@@ -99,7 +99,7 @@ const CameraCapture = ({ onClose, onCapture }) => {
         className="bg-white rounded-3xl p-4 max-w-lg w-full mx-4"
         onClick={e => e.stopPropagation()}
       >
-        <h3 className="text-2xl font-bold text-center mb-4">Add Photo</h3>
+        <h3 className="text-2xl font-bold text-center mb-4">Photo</h3>
         
         {error ? (
           <div className="text-red-500 text-center p-4">{error}</div>
@@ -117,7 +117,7 @@ const CameraCapture = ({ onClose, onCapture }) => {
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-white/80 text-center p-4">
-                      {cameraAvailable ? 'Starting camera…' : 'Camera not available. Choose from gallery below.'}
+                      {cameraAvailable ? 'Camera khol raha hoon…' : 'Camera nahi mila. Neeche gallery se chun sakte hain.'}
                     </div>
                   )}
                 </>
@@ -145,7 +145,7 @@ const CameraCapture = ({ onClose, onCapture }) => {
                       onClick={capturePhoto}
                       className="flex items-center gap-2 px-5 py-3 rounded-full bg-netaji-saffron text-white font-semibold hover:bg-netaji-gold transition"
                     >
-                      <FaCamera /> Take live photo
+                      <FaCamera /> Photo Lein
                     </button>
                   )}
                   <button
@@ -153,7 +153,7 @@ const CameraCapture = ({ onClose, onCapture }) => {
                     onClick={() => fileInputRef.current?.click()}
                     className="flex items-center gap-2 px-5 py-3 rounded-full border-2 border-netaji-green text-netaji-green font-semibold hover:bg-netaji-green hover:text-white transition"
                   >
-                    <FaImages /> Choose from gallery
+                    <FaImages /> Gallery Se Chun Lein
                   </button>
                 </>
               ) : (
@@ -163,14 +163,14 @@ const CameraCapture = ({ onClose, onCapture }) => {
                     onClick={retake}
                     className="flex items-center gap-2 px-5 py-3 border-2 border-gray-300 rounded-full font-semibold hover:bg-gray-50 transition"
                   >
-                    <FaSync /> Retake / Change
+                    <FaSync /> Phir Se Lein
                   </button>
                   <button
                     type="button"
                     onClick={handleSubmit}
                     className="px-5 py-3 bg-netaji-green text-white rounded-full font-semibold hover:bg-green-700 transition"
                   >
-                    Use Photo
+                    Theek Hai, Isi Ko Use Karein
                   </button>
                 </>
               )}

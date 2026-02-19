@@ -17,50 +17,95 @@ func NewDepartmentRepository(db *sql.DB) *DepartmentRepository {
 
 // GetDepartmentByCategoryAndLocation gets department assignment for a category and location
 // Returns department_id and priority override if mapping exists
-// For pilot: Uses simple rule-based mapping (category → department_id)
+// For pilot: Uses simple rule-based mapping (category → department_id, then location → SDM as fallback)
 // In production: Query category_department_mapping table
 func (r *DepartmentRepository) GetDepartmentByCategoryAndLocation(
 	category string,
 	locationID int64,
 ) (*int64, *string, error) {
 	// For pilot: Simple rule-based mapping
-	// Map category to department_id (default department IDs for Shivpuri)
-	// In production, this would query category_department_mapping table
+	// Priority 1: Category-based mapping (PRIMARY)
+	// Priority 2: Location-based fallback (ONLY if category missing/fails)
+	// Priority 3: Default (District Collector Office)
 	
 	var departmentID int64
 	var priorityOverride *string
 	
-	switch category {
-	case "infrastructure":
-		departmentID = 1 // PWD (Public Works Department)
-		priority := "medium"
-		priorityOverride = &priority
-	case "water":
-		departmentID = 2 // Water Supply Department
-		priority := "high"
-		priorityOverride = &priority
-	case "electricity":
-		departmentID = 3 // Electricity Department
-		priority := "urgent"
-		priorityOverride = &priority
-	case "sanitation":
-		departmentID = 4 // Municipal Corporation
-		priority := "high"
-		priorityOverride = &priority
-	case "health":
-		departmentID = 5 // Health Department
-		priority := "high"
-		priorityOverride = &priority
-	case "education":
-		departmentID = 6 // Education Department
-		priority := "medium"
-		priorityOverride = &priority
-	default:
-		// General complaints → District Collector Office
-		departmentID = 7
-		priority := "medium"
-		priorityOverride = &priority
+	// PRIMARY: Try category-based mapping first
+	if category != "" {
+		switch category {
+		case "infrastructure":
+			departmentID = 1 // PWD (Public Works Department)
+			priority := "medium"
+			priorityOverride = &priority
+			return &departmentID, priorityOverride, nil
+		case "water":
+			departmentID = 2 // Water Supply Department
+			priority := "high"
+			priorityOverride = &priority
+			return &departmentID, priorityOverride, nil
+		case "electricity":
+			departmentID = 3 // Electricity Department
+			priority := "urgent"
+			priorityOverride = &priority
+			return &departmentID, priorityOverride, nil
+		case "sanitation":
+			departmentID = 4 // Municipal Corporation
+			priority := "high"
+			priorityOverride = &priority
+			return &departmentID, priorityOverride, nil
+		case "health":
+			departmentID = 5 // Health Department
+			priority := "high"
+			priorityOverride = &priority
+			return &departmentID, priorityOverride, nil
+		case "education":
+			departmentID = 6 // Education Department
+			priority := "medium"
+			priorityOverride = &priority
+			return &departmentID, priorityOverride, nil
+		}
+		// If category exists but doesn't match any case, fall through to location check
 	}
+	
+	// FALLBACK: Location-based routing (ONLY if category missing or doesn't match)
+	// Pilot hardcoding: Location IDs for Kolaras, Pohri, Karera
+	// In production: Query locations table to get actual location IDs
+	const (
+		locationKolaras int64 = 2 // Kolaras tehsil
+		locationPohri   int64 = 3 // Pohri tehsil
+		locationKarera  int64 = 4 // Karera tehsil
+	)
+	
+	// SDM Department IDs (pilot hardcoding)
+	const (
+		deptSDMKolaras int64 = 8 // SDM Kolaras
+		deptSDMPohri   int64 = 9 // SDM Pohri
+		deptSDMKarera  int64 = 10 // SDM Karera
+	)
+	
+	switch locationID {
+	case locationKolaras:
+		departmentID = deptSDMKolaras
+		priority := "high"
+		priorityOverride = &priority
+		return &departmentID, priorityOverride, nil
+	case locationPohri:
+		departmentID = deptSDMPohri
+		priority := "high"
+		priorityOverride = &priority
+		return &departmentID, priorityOverride, nil
+	case locationKarera:
+		departmentID = deptSDMKarera
+		priority := "high"
+		priorityOverride = &priority
+		return &departmentID, priorityOverride, nil
+	}
+	
+	// FINAL FALLBACK: Default (District Collector Office)
+	departmentID = 7
+	priority := "medium"
+	priorityOverride = &priority
 	
 	// Verify department exists (for pilot, assume it exists)
 	// In production: SELECT department_id FROM departments WHERE department_id = ? AND is_active = true

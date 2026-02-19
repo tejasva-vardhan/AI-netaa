@@ -1,73 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaMicrophone, FaCamera, FaMapMarkerAlt, FaPaperPlane, FaStop, FaCheck } from 'react-icons/fa';
+import { FaMicrophone, FaCamera, FaMapMarkerAlt, FaPaperPlane, FaStop } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import Avatar from '../components/Avatar';
 import { useChatStore } from '../stores/chatStore';
 import VoiceRecorder from '../components/VoiceRecorder';
 import CameraCapture from '../components/CameraCapture';
-import { shivpuriDepartments } from '../data/shivpuriDepartments';
 import DepartmentRouter from '../services/departmentRouter';
 import { getAreaFromAddress } from '../utils/locationArea';
 import './Chat.css';
-
-const STEP_ORDER = ['problem', 'location', 'department', 'photo', 'voice', 'processing', 'completed'];
-
-const STEP_LABELS = [
-  { key: 'problem', label: 'Problem' },
-  { key: 'location', label: 'Location' },
-  { key: 'department', label: 'Department' },
-  { key: 'photo', label: 'Photo' },
-  { key: 'voice', label: 'Voice' },
-  { key: 'submit', label: 'Submit' }
-];
-
-const DepartmentSelector = ({ onSelect, selectedId, problem }) => {
-  const [search, setSearch] = useState('');
-  const keywordMatchedIds = new Set(
-    (DepartmentRouter.getDepartmentsByKeywords(problem || '') || []).map((d) => d.id)
-  );
-  const filtered = shivpuriDepartments
-    .filter(
-      (dept) =>
-        dept.name.toLowerCase().includes(search.toLowerCase()) ||
-        (dept.category && dept.category.toLowerCase().includes(search.toLowerCase()))
-    )
-    .sort((a, b) => {
-      const aMatch = keywordMatchedIds.has(a.id) ? 1 : 0;
-      const bMatch = keywordMatchedIds.has(b.id) ? 1 : 0;
-      return bMatch - aMatch;
-    });
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="department-selector"
-    >
-      <h3 className="department-selector-title">विभाग चुनें (Select Department)</h3>
-      <input
-        type="text"
-        placeholder="Search department..."
-        className="department-selector-input"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-      <div className="department-selector-list">
-        {filtered.map((dept) => (
-          <button
-            key={dept.id}
-            type="button"
-            onClick={() => onSelect(dept)}
-            className={`department-selector-item ${selectedId === dept.id ? 'department-selector-item--selected' : ''}`}
-          >
-            <div className="font-medium">{dept.name}</div>
-            <div className="text-sm opacity-75">{dept.email}</div>
-          </button>
-        ))}
-      </div>
-    </motion.div>
-  );
-};
 
 const Chat = () => {
   const [message, setMessage] = useState('');
@@ -80,7 +21,6 @@ const Chat = () => {
     currentStep,
     complaintData,
     setLocation,
-    setSelectedDepartment,
     uploadPhoto,
     uploadVoiceNote,
     resetChat,
@@ -207,18 +147,18 @@ const Chat = () => {
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
           );
           const data = await res.json();
-          const address = data.display_name || 'Location captured';
+          const address = data.display_name || 'Yahin se';
           const area = getAreaFromAddress(address);
           useChatStore.getState().setLocation({ lat: latitude, lng: longitude, area }, address);
           toast.dismiss();
-          toast.success('Location captured!');
+          toast.success('Location mil gaya!');
         } catch (err) {
           toast.dismiss();
           useChatStore.getState().setLocation(
             { lat: position.coords.latitude, lng: position.coords.longitude, area: undefined },
-            'Location captured'
+            'Yahin se'
           );
-          toast.success('Location captured!');
+          toast.success('Location mil gaya!');
         }
       },
       () => {
@@ -242,8 +182,7 @@ const Chat = () => {
     setShowCamera(false);
   };
 
-  const stepIndex = STEP_ORDER.indexOf(currentStep);
-  const showInput = currentStep !== 'completed' && currentStep !== 'processing' && currentStep !== 'department';
+  const showInput = currentStep !== 'completed' && currentStep !== 'processing';
   const hasLocation = complaintData?.location && complaintData?.address;
   const showActionAddress = (currentStep === 'processing' || currentStep === 'completed') && complaintData?.address;
 
@@ -254,26 +193,6 @@ const Chat = () => {
           isSpeaking={currentStep === 'processing'}
           onTalkClick={handleNewComplaint}
         />
-
-        {/* Visual step indicator */}
-        <div className="chat-step-indicator">
-          {STEP_LABELS.map((step, idx) => {
-            const stepKey = step.key === 'submit' ? 'processing' : step.key;
-            const isDone = STEP_ORDER.indexOf(stepKey) < stepIndex || currentStep === 'completed';
-            const isCurrent = stepKey === currentStep || (step.key === 'submit' && (currentStep === 'processing' || currentStep === 'completed'));
-            return (
-              <div
-                key={step.key}
-                className={`chat-step-item ${isDone ? 'chat-step-item--done' : ''} ${isCurrent ? 'chat-step-item--current' : ''}`}
-              >
-                <span className="chat-step-num">
-                  {isDone ? <FaCheck className="chat-step-check" /> : idx + 1}
-                </span>
-                <span className="chat-step-label">{step.label}</span>
-              </div>
-            );
-          })}
-        </div>
 
         <div className="chat-messages-box">
           <AnimatePresence>
@@ -295,19 +214,10 @@ const Chat = () => {
             ))}
           </AnimatePresence>
 
-          {/* Department selection (after location) */}
-          {currentStep === 'department' && (
-            <DepartmentSelector
-              onSelect={setSelectedDepartment}
-              selectedId={complaintData?.selectedDepartment}
-              problem={complaintData?.problem}
-            />
-          )}
-
           {/* Location verified block */}
           {hasLocation && currentStep !== 'problem' && currentStep !== 'location' && (
             <div className="chat-location-verified">
-              <span className="chat-location-pin">📍 Location Verified: {complaintData.address}</span>
+              <span className="chat-location-pin">📍 {complaintData.address}</span>
               {complaintData.location?.lat != null && (
                 <a
                   href={`https://www.openstreetmap.org/?mlat=${complaintData.location.lat}&mlon=${complaintData.location.lng}&zoom=16`}
@@ -324,13 +234,13 @@ const Chat = () => {
           {/* Action will be taken at */}
           {showActionAddress && (
             <div className="chat-action-address">
-              <strong>Action will be taken at:</strong> {complaintData.address}
+              <strong>Yahin action liya jayega:</strong> {complaintData.address}
             </div>
           )}
 
           {isProcessing && (
             <div className="chat-msg chat-msg--ai">
-              <div className="ai-message">Processing...</div>
+              <div className="ai-message">Dekh raha hoon…</div>
             </div>
           )}
           <div ref={messagesEndRef} />
@@ -347,7 +257,7 @@ const Chat = () => {
               onClick={handleNewComplaint}
               className="px-6 py-3 bg-netaji-green text-white rounded-full font-semibold hover:bg-green-700 transition"
             >
-              Register New Complaint
+              Naya Complaint
             </button>
           </motion.div>
         )}
@@ -383,7 +293,7 @@ const Chat = () => {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-              placeholder="Type your message..."
+              placeholder="Aap bataiye..."
               className="chat-input-field"
             />
             <button

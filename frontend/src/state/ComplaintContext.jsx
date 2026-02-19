@@ -14,6 +14,10 @@ export function useComplaintState() {
 }
 
 export function ComplaintProvider({ children }) {
+  const [isTyping, setIsTyping] = useState(false);
+  const messageQueueRef = useRef([]);
+  const isProcessingMessageRef = useRef(false);
+  
   const [complaintData, setComplaintData] = useState(() => {
     // ISSUE 2 & 4: Load from localStorage if exists, but DON'T auto-resume
     // App always starts from LandingScreen - user must explicitly choose to continue
@@ -41,7 +45,7 @@ export function ComplaintProvider({ children }) {
       location: null,
       photo: null,
       conversation: [],
-      step: 'summary', // 'summary' | 'description' | 'location' | 'camera' | 'phone-verify' | 'review'
+      step: 'summary', // 'summary' | 'description' | 'location' | 'location-confirmation' | 'camera' | 'chat' | 'phone-verify-prompt' | 'phone-verify' | 'confirmation'
       completedSteps: [], // Track which steps are completed
       clarificationAsked: false, // Track if clarification question was asked (max = 1)
       userPhone: null,
@@ -69,7 +73,7 @@ export function ComplaintProvider({ children }) {
     if (!phoneVerified || !userID) {
       return 'phone-verify';
     }
-    return 'review';
+    return 'confirmation';
   }
 
   const [userPhone, setUserPhone] = useState(() => {
@@ -99,11 +103,65 @@ export function ComplaintProvider({ children }) {
     setComplaintData(prev => ({ ...prev, ...updates }));
   };
 
+  // Calculate delay based on message length
+  const calculateTypingDelay = (text) => {
+    if (!text) return 400;
+    const length = text.length;
+    // Short messages (< 50 chars): ~400ms
+    // Medium messages (50-150 chars): ~600-900ms
+    // Long messages (> 150 chars): ~900-1200ms
+    if (length < 50) {
+      return 400 + Math.random() * 200; // 400-600ms
+    } else if (length < 150) {
+      return 600 + Math.random() * 300; // 600-900ms
+    } else {
+      return 900 + Math.random() * 300; // 900-1200ms
+    }
+  };
+
+  // Process message queue (one at a time)
+  const processMessageQueue = () => {
+    if (isProcessingMessageRef.current || messageQueueRef.current.length === 0) {
+      return;
+    }
+
+    isProcessingMessageRef.current = true;
+    const message = messageQueueRef.current.shift();
+
+    if (message.type === 'bot') {
+      const delay = calculateTypingDelay(message.text);
+      
+      // Show typing indicator
+      setIsTyping(true);
+      
+      // Add message after delay
+      setTimeout(() => {
+        setIsTyping(false);
+        setComplaintData(prev => ({
+          ...prev,
+          conversation: [...prev.conversation, message]
+        }));
+        isProcessingMessageRef.current = false;
+        // Process next message in queue
+        processMessageQueue();
+      }, delay);
+    } else {
+      // User messages appear instantly
+      setComplaintData(prev => ({
+        ...prev,
+        conversation: [...prev.conversation, message]
+      }));
+      isProcessingMessageRef.current = false;
+      // Process next message in queue
+      processMessageQueue();
+    }
+  };
+
   const addMessage = (message) => {
-    setComplaintData(prev => ({
-      ...prev,
-      conversation: [...prev.conversation, message]
-    }));
+    // Add to queue
+    messageQueueRef.current.push(message);
+    // Process queue
+    processMessageQueue();
   };
 
   const clearComplaintData = (options = {}) => {
@@ -141,6 +199,9 @@ export function ComplaintProvider({ children }) {
     localStorage.setItem('user_phone', phone);
   };
 
+  // Expose goToStep function ref (will be set by ChatScreen)
+  const goToStepRef = useRef(null);
+
   return (
     <ComplaintContext.Provider
       value={{
@@ -149,7 +210,9 @@ export function ComplaintProvider({ children }) {
         addMessage,
         clearComplaintData,
         userPhone,
-        setPhone
+        setPhone,
+        isTyping,
+        goToStepRef
       }}
     >
       {children}

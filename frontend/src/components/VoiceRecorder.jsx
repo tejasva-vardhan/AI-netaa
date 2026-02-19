@@ -73,7 +73,7 @@ const VoiceRecorder = ({ onClose, onRecord }) => {
         className="voice-recorder-modal"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="voice-recorder-title">Record Your Complaint</h3>
+        <h3 className="voice-recorder-title">Voice Me Bataiye</h3>
         <div className="voice-recorder-body">
           <button
             type="button"
@@ -100,13 +100,13 @@ const VoiceRecorder = ({ onClose, onRecord }) => {
               <button type="button" onClick={togglePlayback} className="voice-playback-btn">
                 {playing ? <FaPause /> : <FaPlay />}
               </button>
-              <span className="voice-playback-label">{playing ? 'Pause' : 'Play'} recording</span>
+              <span className="voice-playback-label">{playing ? 'Rok Dein' : 'Sun Lein'}</span>
             </div>
           )}
           <div className="voice-recorder-actions">
             <button type="button" onClick={onClose} className="voice-recorder-cancel">Cancel</button>
             {audioURL && (
-              <button type="button" onClick={handleSubmit} className="voice-recorder-submit">Submit</button>
+              <button type="button" onClick={handleSubmit} className="voice-recorder-submit">Theek Hai</button>
             )}
           </div>
         </div>

@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useComplaintState } from '../state/ComplaintContext';
 import api, { ApiError } from '../services/api';
 import { saveToQueue } from '../utils/offlineQueue';
+import { ensureCategory } from '../utils/categoryInference';
 import './ReviewScreen.css';
 
 function ReviewScreen() {
@@ -11,6 +12,8 @@ function ReviewScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const retryTimeoutRef = useRef(null);
 
   useEffect(() => {
     // ISSUE 3: ReviewScreen visibility rules - only render when ALL required steps complete
@@ -46,17 +49,17 @@ function ReviewScreen() {
   const handleSubmit = async () => {
     // ISSUE 1: Defensive validation - photo MUST exist before submit
     if (!complaintData.summary || !complaintData.description) {
-      setError('Summary aur description zaroori hain.');
+      setError('Aap bataiye kya dikkat hai aur kahan hai.');
       return;
     }
 
     if (!complaintData.location) {
-      setError('Location zaroori hai. Wapas jaake location add karein.');
+      setError('Location chahiye. Wapas jaake location share karein.');
       return;
     }
 
     if (!complaintData.photo || (!complaintData.photo.blob && !complaintData.photo.url)) {
-      setError('Live photo zaroori hai. Wapas jaake photo capture karein.');
+      setError('Agar possible ho toh ek photo bhej dijiye, isse madad milegi. Ya phir skip karke aage badh sakte hain.');
       console.error('Photo missing in complaintData:', complaintData.photo);
       return;
     }
@@ -73,71 +76,174 @@ function ReviewScreen() {
     setError(null);
 
     try {
+      // Ensure category is ALWAYS set before submission
+      const finalCategory = ensureCategory(
+        complaintData.category,
+        complaintData.summary || complaintData.description || ''
+      );
+      
+      // Update complaintData with ensured category
+      const complaintDataWithCategory = {
+        ...complaintData,
+        category: finalCategory
+      };
+      
       // Log photo data before submission for debugging (only in dev mode)
       if (import.meta.env.DEV) {
         console.log('Submitting complaint with photo:', {
           hasBlob: !!complaintData.photo.blob,
           hasUrl: !!complaintData.photo.url,
+          category: finalCategory,
           photo: complaintData.photo
         });
       }
 
-      const response = await api.createComplaint(complaintData);
+      const response = await api.createComplaint(complaintDataWithCategory);
       
-      addMessage({ type: 'system', text: 'Complaint formally register ho gayi.', timestamp: new Date() });
-      clearComplaintData({ keepConversation: true });
+      // Show success message in chat instead of navigating to success screen
+      const complaintNumber = response.complaint_number || response.complaint_id;
+      const successMessage = complaintNumber 
+        ? `Ho gaya.\n\nMaine aapki problem sahi adhikari tak pahucha di hai.\n\nAapko updates milte rahenge.\n\nComplaint ID: ${complaintNumber}`
+        : `Ho gaya.\n\nMaine aapki problem sahi adhikari tak pahucha di hai.\n\nAapko updates milte rahenge.`;
       
-      navigate(`/complaints/${response.complaint_id}`, {
-        state: { 
-          success: true,
-          message: `Complaint register ho gayi. Number: ${response.complaint_number}`,
-          complaintNumber: response.complaint_number
-        }
+      addMessage({
+        type: 'bot',
+        text: successMessage,
+        timestamp: new Date()
       });
-    } catch (err) {
-      let errorMessage = 'Submit fail. Phir se try karein.';
       
+      clearComplaintData({ keepConversation: true });
+      setSubmitting(false);
+      setIsRetrying(false);
+      setError(null);
+      
+      // Navigate back to chat instead of success screen
+      navigate('/chat-legacy');
+    } catch (err) {
+      // Check if this is a retry attempt
+      const isRetryAttempt = isRetrying;
+      
+      // For non-retryable errors (401, validation errors), show error immediately
       if (err instanceof ApiError) {
         if (err.status === 400) {
-          errorMessage = err.message || 'Data sahi nahi. Check karein.';
+          // Validation error - don't retry
+          setError(err.message || 'Kuch data sahi nahi lag raha. Ek baar check karein.');
+          setSubmitting(false);
+          setIsRetrying(false);
+          return;
         } else if (err.status === 401) {
-          errorMessage = err.message || 'Phone verify karein.';
+          // Auth error - don't retry
+          setError(err.message || 'Phone verify karein.');
           // Clear invalid token
           localStorage.removeItem('auth_token');
           localStorage.removeItem('phone_verified');
+          setSubmitting(false);
+          setIsRetrying(false);
           // Navigate to phone verification screen
           navigate('/phone-verify');
-        } else if (err.status === 0) {
-          // Check error code to distinguish CORS from actual network errors
-          if (err.code === 'CORS_ERROR') {
-            errorMessage = 'Backend CORS error. Connection check karein.';
-          } else if (err.code === 'TIMEOUT') {
-            errorMessage = 'Request timeout. Phir se try karein.';
-          } else {
-            const isOffline = !navigator.onLine;
-            if (isOffline) {
-              errorMessage = 'Aap offline hain. Complaint local save ho gayi, online aate hi submit ho jayegi.';
+          return;
+        } else if (err.code === 'CORS_ERROR') {
+          // CORS error - don't retry
+          setError('Backend CORS error. Connection check karein.');
+          setSubmitting(false);
+          setIsRetrying(false);
+          return;
+        }
+      }
+      
+      // For retryable errors (network, server errors)
+      if (!isRetryAttempt) {
+        // First failure: Show initial message and auto-retry once
+        setError('Thoda issue aa gaya.');
+        setSubmitting(false);
+        setIsRetrying(true);
+        
+        // Clear any existing retry timeout
+        if (retryTimeoutRef.current) {
+          clearTimeout(retryTimeoutRef.current);
+        }
+        
+        // Automatically retry once in background after a short delay
+        retryTimeoutRef.current = setTimeout(async () => {
+          try {
+            // Ensure category is set before retry
+            const finalCategory = ensureCategory(
+              complaintData.category,
+              complaintData.summary || complaintData.description || ''
+            );
+            
+            const complaintDataWithCategory = {
+              ...complaintData,
+              category: finalCategory
+            };
+            
+            const response = await api.createComplaint(complaintDataWithCategory);
+            
+            // Retry succeeded - continue normal success flow
+            const complaintNumber = response.complaint_number || response.complaint_id;
+            const successMessage = complaintNumber 
+              ? `Ho gaya.\n\nMaine aapki problem sahi adhikari tak pahucha di hai.\n\nAapko updates milte rahenge.\n\nComplaint ID: ${complaintNumber}`
+              : `Ho gaya.\n\nMaine aapki problem sahi adhikari tak pahucha di hai.\n\nAapko updates milte rahenge.`;
+            
+            addMessage({
+              type: 'bot',
+              text: successMessage,
+              timestamp: new Date()
+            });
+            
+            clearComplaintData({ keepConversation: true });
+            setIsRetrying(false);
+            setError(null);
+            retryTimeoutRef.current = null;
+            
+            // Navigate back to chat
+            navigate('/chat-legacy');
+          } catch (retryErr) {
+            // Retry also failed - show final error message
+            setError('Abhi thoda network issue lag raha hai.\n\nThodi der baad phir try kar sakte hain.');
+            setIsRetrying(false);
+            retryTimeoutRef.current = null;
+            
+            // Save to offline queue as fallback
+            if (!navigator.onLine || (retryErr instanceof ApiError && retryErr.status === 0)) {
               saveToQueue(complaintData);
-            } else {
-              errorMessage = 'Request fail. Connection check karein.';
             }
           }
-        } else {
-          errorMessage = err.message || `Error: ${err.status}. Phir se try karein.`;
-        }
+        }, 1000); // Wait 1 second before retry
       } else {
-        errorMessage = err.message || errorMessage;
+        // This is the retry attempt that failed - should not reach here as it's handled above
+        setError('Abhi thoda network issue lag raha hai.\n\nThodi der baad phir try kar sakte hain.');
+        setIsRetrying(false);
+        retryTimeoutRef.current = null;
+        
+        // Save to offline queue as fallback
+        if (!navigator.onLine || (err instanceof ApiError && err.status === 0)) {
+          saveToQueue(complaintData);
+        }
       }
-
-      setError(errorMessage);
-      setSubmitting(false);
     }
   };
 
   const handleRetry = () => {
+    // Clear any pending automatic retry
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+    setIsRetrying(false);
+    setError(null);
     setRetryCount(prev => prev + 1);
     handleSubmit();
   };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleEdit = (section) => {
     // ISSUE 1: Edit buttons - only Summary and Description are editable
@@ -166,38 +272,42 @@ function ReviewScreen() {
         <button type="button" className="back-button" onClick={() => navigate('/phone-verify')}>
           Back
         </button>
-        <h2>Review Complaint</h2>
+        <h2>Ek Baar Dekh Lein</h2>
       </div>
 
       <div className="review-content">
         {submitting && (
           <div className="loading">
-            <p>Main ise formally register kar raha hoon.</p>
-            <p className="loading-subtext">Prastha karein.</p>
+            <p>Main ise register kar raha hoon.</p>
+            <p className="loading-subtext">Thoda wait karein.</p>
           </div>
         )}
 
-        {error && <div className="error">{error}</div>}
+        {error && (
+          <div className="error" style={{ whiteSpace: 'pre-line' }}>
+            {error}
+          </div>
+        )}
 
         {/* ISSUE 1: Only Summary and Description are editable and shown */}
         <div className="review-section">
           <div className="review-section-header">
-            <h3>Summary</h3>
+            <h3>Aap ne kya kaha</h3>
             <button type="button" className="edit-button" onClick={() => handleEdit('summary')}>
-              Edit
+              Badal Dein
             </button>
           </div>
-          <p className="review-text">{complaintData.summary || 'Not provided'}</p>
+          <p className="review-text">{complaintData.summary || 'Nahi batai'}</p>
         </div>
 
         <div className="review-section">
           <div className="review-section-header">
-            <h3>Description</h3>
+            <h3>Detail</h3>
             <button type="button" className="edit-button" onClick={() => handleEdit('description')}>
-              Edit
+              Badal Dein
             </button>
           </div>
-          <p className="review-text">{complaintData.description || 'Not provided'}</p>
+          <p className="review-text">{complaintData.description || 'Nahi batai'}</p>
         </div>
 
         {/* ISSUE 3: Photo preview - VIEW ONLY (no edit) */}
@@ -228,7 +338,7 @@ function ReviewScreen() {
             </div>
           ) : (
             <div className="error" style={{ marginTop: '8px' }}>
-              Photo nahi hai. Wapas jaake capture karein.
+              Agar possible ho toh ek photo bhej dijiye, isse madad milegi.
             </div>
           )}
         </div>
@@ -241,7 +351,7 @@ function ReviewScreen() {
                 onClick={handleRetry}
                 disabled={submitting}
               >
-                Retry
+                Phir Se Try Karein
               </button>
             </div>
           )}
@@ -250,11 +360,11 @@ function ReviewScreen() {
             onClick={handleSubmit}
             disabled={submitting || !complaintData.summary || !complaintData.description || !complaintData.photo}
           >
-            {submitting ? 'Register ho raha hai…' : 'Submit Complaint'}
+            {submitting ? 'Register ho raha hai…' : 'Theek Hai, Register Kar Dein'}
           </button>
           {submitting && (
             <p className="submitting-hint">
-              Main ise formally register kar raha hoon.
+              Main ise register kar raha hoon.
             </p>
           )}
         </div>

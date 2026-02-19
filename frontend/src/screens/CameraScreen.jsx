@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useComplaintState } from '../state/ComplaintContext';
+import { getRandomPhrase } from '../utils/botPhrases';
 import './CameraScreen.css';
 
 function CameraScreen() {
   const navigate = useNavigate();
-  const { complaintData, updateComplaintData, addMessage } = useComplaintState();
+  const { complaintData, updateComplaintData, addMessage, goToStepRef } = useComplaintState();
   const [stream, setStream] = useState(null);
   const [photo, setPhoto] = useState(null);
   const [error, setError] = useState(null);
@@ -15,18 +16,13 @@ function CameraScreen() {
   const canvasRef = useRef(null);
 
   useEffect(() => {
-    // ISSUE 5: Defensive validation - ensure we should be on this screen
+    // STRICT VALIDATION: Only allow if prerequisites met
     if (!complaintData.summary || !complaintData.description) {
-      navigate('/chat');
+      navigate('/chat-legacy');
       return;
     }
     if (!complaintData.location) {
       navigate('/location');
-      return;
-    }
-    
-    if (complaintData.step === 'phone-verify' || complaintData.step === 'review') {
-      navigate(`/${complaintData.step}`);
       return;
     }
     
@@ -89,8 +85,31 @@ function CameraScreen() {
 
     canvas.toBlob((blob) => {
       const url = URL.createObjectURL(blob);
-      setPhoto({ blob, url });
+      const photoData = { blob, url };
+      setPhoto(photoData);
       stopCamera();
+      
+      // Update state
+      const completedSteps = complaintData.completedSteps || [];
+      updateComplaintData({ 
+        photo: photoData,
+        completedSteps: [...completedSteps, 'photo']
+      });
+      
+      addMessage({ type: 'bot', text: `${getRandomPhrase('okay')}`, timestamp: new Date() });
+      // EVENT-DRIVEN: Direct step transition on async completion
+      setTimeout(() => {
+        navigate('/chat-legacy');
+        if (goToStepRef?.current) {
+          // Check if phone verification needed
+          const phoneVerified = localStorage.getItem('phone_verified') === 'true';
+          if (!phoneVerified) {
+            goToStepRef.current('phone-verify-prompt');
+          } else {
+            goToStepRef.current('confirmation');
+          }
+        }
+      }, 1000);
     }, 'image/jpeg', 0.8);
   };
 
@@ -99,26 +118,25 @@ function CameraScreen() {
     startCamera();
   };
 
-  const handleContinue = () => {
-    if (photo) {
-      const completedSteps = complaintData.completedSteps || [];
-      updateComplaintData({ 
-        photo,
-        step: 'phone-verify',
-        completedSteps: [...completedSteps, 'camera']
-      });
-      addMessage({ type: 'system', text: 'Photo capture ho gaya.', timestamp: new Date() });
-      navigate('/phone-verify');
-    }
-  };
 
   const handleSkip = () => {
     const completedSteps = complaintData.completedSteps || [];
+    // Update state
     updateComplaintData({ 
-      step: 'phone-verify',
-      completedSteps: [...completedSteps, 'camera']
+      completedSteps: [...completedSteps, 'photo']
     });
-    navigate('/phone-verify');
+    addMessage({ type: 'bot', text: 'Thik hai, bina photo ke bhi main aage bhej raha hoon.', timestamp: new Date() });
+    // EVENT-DRIVEN: Direct step transition on skip
+    navigate('/chat-legacy');
+    if (goToStepRef?.current) {
+      // Check if phone verification needed
+      const phoneVerified = localStorage.getItem('phone_verified') === 'true';
+      if (!phoneVerified) {
+        goToStepRef.current('phone-verify-prompt');
+      } else {
+        goToStepRef.current('confirmation');
+      }
+    }
   };
 
   return (
@@ -127,14 +145,14 @@ function CameraScreen() {
         <button type="button" className="back-button" onClick={() => navigate('/location')}>
           Back
         </button>
-        <h2>Live Photo</h2>
+        <h2>Photo</h2>
       </div>
 
       <div className="camera-container">
         {loading && !error && (
           <div className="loading">
-            <p>Camera start ho raha hai…</p>
-            <p className="loading-subtext">Camera permission allow karein.</p>
+            <p>Camera khol raha hoon…</p>
+            <p className="loading-subtext">Camera permission allow kar dijiye.</p>
           </div>
         )}
 
@@ -142,7 +160,7 @@ function CameraScreen() {
           <div className="error">
             <p>{error}</p>
             <p className="error-subtext" style={{ fontSize: '14px', marginTop: '8px' }}>
-              Photo skip karke aage badh sakte hain.
+              Photo skip karke aage badh sakte hain, koi baat nahi.
             </p>
           </div>
         )}
@@ -158,7 +176,7 @@ function CameraScreen() {
             <canvas ref={canvasRef} className="hidden" />
             <div className="camera-controls">
               <button type="button" className="btn btn-primary" onClick={capturePhoto}>
-                Capture Photo
+                Photo Lein
               </button>
             </div>
           </>
@@ -166,9 +184,9 @@ function CameraScreen() {
 
         {!loading && !error && !photo && !stream && (
           <div className="camera-prompt">
-            <p>Live photo ke liye camera permission chahiye.</p>
+            <p>Agar possible ho toh ek photo bhej dijiye, taaki main samajh sakoon.</p>
             <button type="button" className="btn btn-primary" onClick={startCamera}>
-              Allow Camera
+              Camera Khol Dein
             </button>
           </div>
         )}
@@ -178,10 +196,7 @@ function CameraScreen() {
             <img src={photo.url} alt="Captured" className="photo-preview" />
             <div className="photo-controls">
               <button type="button" className="btn btn-secondary" onClick={retakePhoto}>
-                Retake
-              </button>
-              <button type="button" className="btn btn-primary" onClick={handleContinue}>
-                Continue
+                Phir Se Lein
               </button>
             </div>
           </>
@@ -190,7 +205,7 @@ function CameraScreen() {
 
       <div className="camera-footer">
         <button type="button" className="link-button" onClick={handleSkip}>
-          Skip Photo
+            Abhi Skip Kar Dein
         </button>
       </div>
     </div>

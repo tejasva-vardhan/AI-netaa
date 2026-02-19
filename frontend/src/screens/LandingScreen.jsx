@@ -55,9 +55,10 @@ function LandingScreen() {
     const step = complaintData.step || 'summary';
     if (step === 'summary' || step === 'description') navigate('/chat');
     else if (step === 'location') navigate('/location');
+    else if (step === 'location-confirmation' || step === 'chat' || step === 'phone-verify-prompt') navigate('/chat-legacy');
     else if (step === 'camera') navigate('/camera');
     else if (step === 'phone-verify') navigate('/phone-verify');
-    else if (step === 'review') navigate('/review');
+    else if (step === 'confirmation') navigate('/chat-legacy');
     else navigate('/chat');
   };
 
