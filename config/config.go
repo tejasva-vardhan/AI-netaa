@@ -14,11 +14,12 @@ type Config struct {
 
 // DatabaseConfig holds database configuration
 type DatabaseConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	DBName   string
+	DatabaseURL string // DATABASE_URL (e.g. from Render) - takes precedence over individual vars
+	Host        string
+	Port        string
+	User        string
+	Password    string
+	DBName      string
 }
 
 // ServerConfig holds server configuration
@@ -35,19 +36,21 @@ type PilotConfig struct {
 	EscalationWorkerIntervalSeconds int // ESCALATION_WORKER_INTERVAL_SECONDS: Worker run interval in seconds (0 = use default: 1h or pilot 30s)
 }
 
-// LoadConfig loads configuration from environment variables
+// LoadConfig loads configuration from environment variables.
+// Supports DATABASE_URL (for Render) or individual DB_* variables (for local dev).
 func LoadConfig() *Config {
 	return &Config{
 		Database: DatabaseConfig{
-			Host:     getEnv("DB_HOST", "localhost"),
-			Port:     getEnv("DB_PORT", "3306"),
-			User:     getEnv("DB_USER", "root"),
-			Password: getEnv("DB_PASSWORD", ""),
-			DBName:   getEnv("DB_NAME", "finalneta"),
+			DatabaseURL: os.Getenv("DATABASE_URL"),
+			Host:        os.Getenv("DB_HOST"),
+			Port:        os.Getenv("DB_PORT"),
+			User:        os.Getenv("DB_USER"),
+			Password:    os.Getenv("DB_PASSWORD"),
+			DBName:      os.Getenv("DB_NAME"),
 		},
 		Server: ServerConfig{
 			Host: getEnv("SERVER_HOST", "0.0.0.0"),
-			Port: getEnv("SERVER_PORT", "8080"),
+			Port: getEnv("PORT", getEnv("SERVER_PORT", "8080")), // PORT for Render/fly.io; SERVER_PORT for custom
 		},
 		Pilot: PilotConfig{
 			DryRun:                         getEnvBool("PILOT_DRY_RUN", false),

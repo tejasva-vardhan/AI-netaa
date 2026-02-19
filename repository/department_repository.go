@@ -144,3 +144,54 @@ func (r *DepartmentRepository) FindOfficerForDepartment(
 	
 	return &officerID.Int64, nil
 }
+
+// GetDepartmentName gets department name by ID
+// Returns department name or fallback name if not found
+func (r *DepartmentRepository) GetDepartmentName(departmentID int64) (string, error) {
+	query := `
+		SELECT name
+		FROM departments
+		WHERE department_id = ? AND is_active = true
+		LIMIT 1
+	`
+	
+	var name string
+	err := r.db.QueryRow(query, departmentID).Scan(&name)
+	if err == sql.ErrNoRows {
+		// Fallback: return descriptive name based on ID (for pilot)
+		return getFallbackDepartmentName(departmentID), nil
+	}
+	if err != nil {
+		return getFallbackDepartmentName(departmentID), fmt.Errorf("failed to get department name: %w", err)
+	}
+	
+	return name, nil
+}
+
+// getFallbackDepartmentName returns a descriptive name for known department IDs (pilot fallback)
+func getFallbackDepartmentName(departmentID int64) string {
+	switch departmentID {
+	case 1:
+		return "PWD (Public Works Department)"
+	case 2:
+		return "Water Supply Department"
+	case 3:
+		return "Electricity Department"
+	case 4:
+		return "Municipal Corporation"
+	case 5:
+		return "Health Department"
+	case 6:
+		return "Education Department"
+	case 7:
+		return "District Collector Office"
+	case 8:
+		return "SDM Kolaras"
+	case 9:
+		return "SDM Pohri"
+	case 10:
+		return "SDM Karera"
+	default:
+		return fmt.Sprintf("Department %d", departmentID)
+	}
+}

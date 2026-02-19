@@ -19,7 +19,7 @@ export default function AuthorityDashboardScreen() {
     }
     let cancelled = false;
     setLoading(true);
-    authorityApi.complaints({ page, page_size: pageSize, status: statusFilter || undefined })
+    authorityApi.complaints({ page, page_size: pageSize, status: statusFilter === 'all' ? undefined : statusFilter })
       .then((res) => {
         if (!cancelled) {
           setComplaints(res.complaints || []);
@@ -31,62 +31,111 @@ export default function AuthorityDashboardScreen() {
     return () => { cancelled = true; };
   }, [navigate, page, pageSize, statusFilter]);
 
+  const stats = {
+    total: total,
+    pending: complaints.filter(c => c.current_status === 'submitted').length,
+    inProgress: complaints.filter(c => c.current_status === 'in_progress').length,
+    resolved: complaints.filter(c => c.current_status === 'resolved').length,
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('authority_token');
     navigate('/authority/login', { replace: true });
   };
 
   return (
-    <div style={{ padding: 20 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h1>Assigned Complaints</h1>
-        <button onClick={handleLogout} style={{ padding: '6px 12px' }}>Logout</button>
-      </div>
-      <div style={{ marginBottom: 12 }}>
-        <label>Status filter </label>
-        <select
-          value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-          style={{ marginLeft: 8, padding: 4 }}
-        >
-          <option value="">All</option>
-          <option value="submitted">submitted</option>
-          <option value="under_review">under_review</option>
-          <option value="in_progress">in_progress</option>
-          <option value="resolved">resolved</option>
-          <option value="escalated">escalated</option>
-        </select>
-      </div>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {loading ? <p>Loading...</p> : (
-        <>
-          <p>Total: {total}</p>
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {complaints.map((c) => (
-              <li key={c.complaint_id} style={{ border: '1px solid #ccc', marginBottom: 8, padding: 12 }}>
-                <strong>{c.complaint_number}</strong> — {c.title}
-                <br />
-                Status: {c.current_status} | Priority: {c.priority} | Created: {c.created_at}
-                <br />
-                <button
-                  type="button"
-                  onClick={() => navigate(`/authority/complaints/${c.complaint_id}`, { state: { complaint: c } })}
-                  style={{ marginTop: 8, padding: '4px 8px' }}
-                >
-                  View &amp; update status
-                </button>
-              </li>
-            ))}
-          </ul>
-          {total > pageSize && (
-            <div style={{ marginTop: 12 }}>
-              <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</button>
-              <span style={{ margin: '0 12px' }}>Page {page}</span>
-              <button disabled={page * pageSize >= total} onClick={() => setPage((p) => p + 1)}>Next</button>
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold text-gray-900">Authority Dashboard</h1>
+          <Button variant="secondary" onClick={handleLogout}>
+            Logout
+          </Button>
+        </div>
+        
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          {Object.entries(stats).map(([key, value]) => (
+            <motion.div
+              key={key}
+              whileHover={{ y: -2 }}
+              className="bg-white rounded-xl shadow-sm p-6 border border-gray-100"
+            >
+              <p className="text-sm text-gray-500 capitalize">{key}</p>
+              <p className="text-2xl font-bold text-gray-900">{value}</p>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Filters */}
+        <div className="flex space-x-2 mb-4">
+          {['all', 'submitted', 'under_review', 'in_progress', 'resolved'].map((status) => (
+            <Button
+              key={status}
+              variant={statusFilter === status ? 'primary' : 'secondary'}
+              onClick={() => { setStatusFilter(status); setPage(1); }}
+              className="text-sm"
+            >
+              {status.replace('_', ' ')}
+            </Button>
+          ))}
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+            {error}
+          </div>
+        )}
+
+        {/* Loading */}
+        {loading ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Loading...</p>
+          </div>
+        ) : (
+          <>
+            {/* Complaint List */}
+            <div className="space-y-4 mb-6">
+              {complaints
+                .filter(c => statusFilter === 'all' || c.current_status === statusFilter)
+                .map(complaint => (
+                  <ComplaintCard
+                    key={complaint.complaint_id}
+                    complaint={{
+                      complaint_number: complaint.complaint_number,
+                      current_status: complaint.current_status,
+                      created_at: complaint.created_at,
+                      title: complaint.title
+                    }}
+                    onClick={() => navigate(`/authority/complaints/${complaint.complaint_id}`, { state: { complaint } })}
+                  />
+                ))}
             </div>
-          )}
-        </>
-      )}
+
+            {/* Pagination */}
+            {total > pageSize && (
+              <div className="flex justify-center items-center space-x-4 mt-6">
+                <Button
+                  variant="secondary"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Prev
+                </Button>
+                <span className="text-gray-600">Page {page}</span>
+                <Button
+                  variant="secondary"
+                  disabled={page * pageSize >= total}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

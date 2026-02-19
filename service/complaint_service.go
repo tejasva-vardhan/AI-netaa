@@ -6,6 +6,7 @@ import (
 	"finalneta/models"
 	"finalneta/repository"
 	"fmt"
+	"log"
 )
 
 // ComplaintService handles business logic for complaints
@@ -123,6 +124,7 @@ func (s *ComplaintService) CreateComplaint(
 
 	// ALWAYS assign department (either from category mapping or default)
 	complaint.AssignedDepartmentID = sql.NullInt64{Int64: assignedDeptID, Valid: true}
+	log.Printf("[complaint] Assigned to department ID=%d", assignedDeptID)
 
 	// Override priority if category mapping specifies it
 	if priorityOverride != nil {
@@ -147,10 +149,12 @@ func (s *ComplaintService) CreateComplaint(
 	}
 
 	// Create complaint in database
+	log.Printf("[complaint] Creating complaint with category=%v, location_id=%d", req.Category, req.LocationID)
 	err = s.repo.CreateComplaint(complaint)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create complaint: %w", err)
 	}
+	log.Printf("[complaint] Complaint created with ID=%d, number=%s", complaint.ComplaintID, complaint.ComplaintNumber)
 
 	// Create initial status history entry (submission audit: user, actor_id, reason)
 	statusHistory := &models.ComplaintStatusHistory{
@@ -188,10 +192,35 @@ func (s *ComplaintService) CreateComplaint(
 
 	// Pilot: send assignment email to shadow inbox only (async, non-blocking)
 	// Authority abstraction: department_id only, not officer-based
-	if s.emailShadowService != nil && complaint.AssignedDepartmentID.Valid {
+	// CRITICAL: Email MUST be sent after successful assignment
+	if complaint.AssignedDepartmentID.Valid {
 		deptID := complaint.AssignedDepartmentID.Int64
-		deptName := fmt.Sprintf("Department %d", deptID)
-		s.emailShadowService.SendAssignmentEmailAsync(complaint.ComplaintID, complaint.ComplaintNumber, deptID, deptName)
+		
+		// Get real department name from repository
+		var deptName string
+		if s.departmentRepo != nil {
+			name, err := s.departmentRepo.GetDepartmentName(deptID)
+			if err != nil {
+				log.Printf("[complaint] Warning: Failed to get department name for ID=%d: %v", deptID, err)
+				deptName = fmt.Sprintf("Department %d", deptID) // Fallback
+			} else {
+				deptName = name
+			}
+		} else {
+			deptName = fmt.Sprintf("Department %d", deptID) // Fallback if repo not available
+		}
+		
+		log.Printf("[complaint] Sending assignment email for complaint ID=%d to department ID=%d (%s)", 
+			complaint.ComplaintID, deptID, deptName)
+		
+		if s.emailShadowService != nil {
+			s.emailShadowService.SendAssignmentEmailAsync(complaint.ComplaintID, complaint.ComplaintNumber, deptID, deptName)
+			log.Printf("[complaint] Assignment email queued for complaint ID=%d", complaint.ComplaintID)
+		} else {
+			log.Printf("[complaint] ERROR: emailShadowService is nil - email NOT sent for complaint ID=%d", complaint.ComplaintID)
+		}
+	} else {
+		log.Printf("[complaint] ERROR: AssignedDepartmentID is not valid - email NOT sent for complaint ID=%d", complaint.ComplaintID)
 	}
 
 	// Emit pilot metrics event: complaint_created
@@ -234,12 +263,22 @@ func (s *ComplaintService) CreateComplaint(
 		// Audit logging should be resilient
 	}
 
-	return &models.CreateComplaintResponse{
+	// Build response with assigned department ID for admin visibility
+	response := &models.CreateComplaintResponse{
 		ComplaintID:     complaint.ComplaintID,
 		ComplaintNumber: complaintNumber,
 		Status:          string(initialStatus),
 		Message:         "Complaint created successfully",
-	}, nil
+	}
+	
+	// Include assigned_department_id in response for admin visibility
+	if complaint.AssignedDepartmentID.Valid {
+		deptID := complaint.AssignedDepartmentID.Int64
+		response.AssignedDepartmentID = &deptID
+		log.Printf("[complaint] Response includes assigned_department_id=%d", deptID)
+	}
+	
+	return response, nil
 }
 
 // GetUserComplaints retrieves all complaints for a specific user

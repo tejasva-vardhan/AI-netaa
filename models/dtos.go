@@ -19,10 +19,11 @@ type CreateComplaintRequest struct {
 
 // CreateComplaintResponse represents the response after creating a complaint
 type CreateComplaintResponse struct {
-	ComplaintID     int64  `json:"complaint_id"`
-	ComplaintNumber string `json:"complaint_number"`
-	Status          string `json:"status"`
-	Message         string `json:"message"`
+	ComplaintID          int64  `json:"complaint_id"`
+	ComplaintNumber      string `json:"complaint_number"`
+	Status               string `json:"status"`
+	Message              string `json:"message"`
+	AssignedDepartmentID *int64 `json:"assigned_department_id,omitempty"` // For admin visibility
 }
 
 // ComplaintDetailResponse represents a complaint with full details (citizen view)

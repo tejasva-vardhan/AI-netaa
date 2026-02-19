@@ -147,34 +147,18 @@ function ComplaintsListScreen() {
               </button>
             </div>
           ) : (
-            <div className="complaints-list complaints-list--cards">
+            <div className="space-y-4">
               {complaints.map((complaint) => (
-                <div
+                <ComplaintCard
                   key={complaint.complaint_id}
-                  className="complaint-card complaint-card--clickable"
+                  complaint={{
+                    complaint_number: complaint.complaint_number,
+                    current_status: complaint.current_status,
+                    created_at: complaint.created_at,
+                    title: complaint.title || 'Complaint'
+                  }}
                   onClick={() => navigate(`/complaints/${complaint.complaint_id}`)}
-                  onKeyDown={(e) => e.key === 'Enter' && navigate(`/complaints/${complaint.complaint_id}`)}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <div className="complaint-card__accent" data-status={complaint.current_status} />
-                  <div className="complaint-card__top">
-                    <span className="complaint-number complaint-number--large">
-                      #{complaint.complaint_number}
-                    </span>
-                    <span className={`status-badge ${getStatusBadgeClass(complaint.current_status)}`}>
-                      {getStatusLabel(complaint.current_status)}
-                    </span>
-                  </div>
-                  <p className="complaint-title">{complaint.title || 'Complaint'}</p>
-                  <div className="complaint-meta">
-                    <span className="complaint-date">{formatDate(complaint.created_at)}</span>
-                    {complaint.supporter_count > 0 && (
-                      <span className="supporter-count">{complaint.supporter_count} supporters</span>
-                    )}
-                  </div>
-                  <p className="complaint-card__hint">Tap to view details</p>
-                </div>
+                />
               ))}
             </div>
           )}

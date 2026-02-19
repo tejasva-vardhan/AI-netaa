@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"encoding/json"
 	"finalneta/handler"
 	"finalneta/middleware"
 	"finalneta/repository"
@@ -11,6 +12,11 @@ import (
 
 	"github.com/gorilla/mux"
 )
+
+// rootResponse is the JSON body for GET /
+type rootResponse struct {
+	Message string `json:"message"`
+}
 
 // SetupRoutes configures all API routes
 func SetupRoutes(
@@ -27,6 +33,13 @@ func SetupRoutes(
 	voiceNoteRepo *repository.VoiceNoteRepository,
 ) *mux.Router {
 	router := mux.NewRouter()
+
+	// GET / - Root/health demo (no 404 when opening base URL e.g. via ngrok)
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(rootResponse{Message: "AI Neta Backend Running 🚀"})
+	}).Methods("GET")
 
 	// Initialize handlers
 	complaintHandler := handler.NewComplaintHandler(complaintService, userService, abusePreventionService, complaintRepo, voiceNoteRepo)

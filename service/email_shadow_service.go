@@ -86,15 +86,28 @@ This is a pilot run. Real authority emails are disabled.`,
 		Body:                body,
 		Status:              "pending",
 	}
+	
+	// CRITICAL: Always log email attempt, even if sending fails
+	log.Printf("[email_shadow] Logging assignment email for complaint ID=%d, department ID=%d", complaintID, departmentID)
 	if err := s.emailLogRepo.Create(logEntry); err != nil {
-		log.Printf("[email_shadow] failed to log assignment email: %v", err)
-		return
-	}
-	if sendErr := s.sendToPilotInbox(subject, body); sendErr != nil {
-		_ = s.emailLogRepo.UpdateStatus(logEntry.ID, "failed", sendErr.Error())
-		log.Printf("[email_shadow] send to pilot inbox failed: %v", sendErr)
+		log.Printf("[email_shadow] ERROR: Failed to log assignment email: %v", err)
+		// Continue anyway - try to send even if logging fails
 	} else {
-		_ = s.emailLogRepo.UpdateStatus(logEntry.ID, "sent", "")
+		log.Printf("[email_shadow] Email log created with ID=%d for complaint ID=%d", logEntry.ID, complaintID)
+	}
+	
+	// Send email to pilot inbox (shadow mode)
+	log.Printf("[email_shadow] Sending assignment email to %s for complaint ID=%d", PilotInboxEmail, complaintID)
+	if sendErr := s.sendToPilotInbox(subject, body); sendErr != nil {
+		if logEntry.ID > 0 {
+			_ = s.emailLogRepo.UpdateStatus(logEntry.ID, "failed", sendErr.Error())
+		}
+		log.Printf("[email_shadow] ERROR: Send to pilot inbox failed: %v", sendErr)
+	} else {
+		if logEntry.ID > 0 {
+			_ = s.emailLogRepo.UpdateStatus(logEntry.ID, "sent", "")
+		}
+		log.Printf("[email_shadow] Assignment email sent successfully for complaint ID=%d", complaintID)
 	}
 }
 

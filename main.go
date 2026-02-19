@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -25,7 +27,29 @@ func main() {
 
 	// Load configuration
 	cfg := config.LoadConfig()
-	
+
+	// Validate database configuration
+	// If DATABASE_URL is set, use it (no need to validate DB_* vars)
+	// Otherwise, require DB_HOST, DB_PORT, DB_USER, DB_NAME
+	if cfg.Database.DatabaseURL == "" {
+		var missing []string
+		if cfg.Database.Host == "" {
+			missing = append(missing, "DB_HOST")
+		}
+		if cfg.Database.Port == "" {
+			missing = append(missing, "DB_PORT")
+		}
+		if cfg.Database.User == "" {
+			missing = append(missing, "DB_USER")
+		}
+		if cfg.Database.DBName == "" {
+			missing = append(missing, "DB_NAME")
+		}
+		if len(missing) > 0 {
+			log.Fatalf("Missing required database environment variables: %v. Set DATABASE_URL or individual DB_* variables (e.g. in .env or Render dashboard).", missing)
+		}
+	}
+
 	// Log dry-run mode status if enabled
 	if cfg.Pilot.DryRun {
 		log.Printf("[DRY RUN] Pilot dry-run mode ENABLED")
@@ -44,14 +68,52 @@ func main() {
 		log.Printf("Test escalation override DISABLED")
 	}
 
-	// Initialize database connection (UTC for consistent timestamps)
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&loc=UTC",
-		cfg.Database.User,
-		cfg.Database.Password,
-		cfg.Database.Host,
-		cfg.Database.Port,
-		cfg.Database.DBName,
-	)
+	// Initialize database connection
+	// Use DATABASE_URL if present (Render), otherwise build DSN from individual vars (local dev)
+	var dsn string
+	if cfg.Database.DatabaseURL != "" {
+		// Use DATABASE_URL - convert from URL format to MySQL DSN format if needed
+		dbURL := cfg.Database.DatabaseURL
+		if strings.HasPrefix(dbURL, "mysql://") {
+			// Parse mysql://user:password@host:port/dbname format
+			parsedURL, err := url.Parse(dbURL)
+			if err != nil {
+				log.Fatalf("Failed to parse DATABASE_URL: %v", err)
+			}
+			
+			// Extract components
+			user := parsedURL.User.Username()
+			password, _ := parsedURL.User.Password()
+			host := parsedURL.Hostname()
+			port := parsedURL.Port()
+			if port == "" {
+				port = "3306" // Default MySQL port
+			}
+			dbName := strings.TrimPrefix(parsedURL.Path, "/")
+			
+			// Build DSN format: user:password@tcp(host:port)/dbname?params
+			// Note: MySQL driver handles special characters in user/password automatically
+			dsn = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&loc=UTC",
+				user,
+				password,
+				host,
+				port,
+				dbName,
+			)
+		} else {
+			// Already in DSN format, use directly
+			dsn = dbURL
+		}
+	} else {
+		// Build DSN from individual DB_* variables (UTC for consistent timestamps)
+		dsn = fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&charset=utf8mb4&loc=UTC",
+			cfg.Database.User,
+			cfg.Database.Password,
+			cfg.Database.Host,
+			cfg.Database.Port,
+			cfg.Database.DBName,
+		)
+	}
 
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
