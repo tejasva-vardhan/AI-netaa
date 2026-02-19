@@ -127,8 +127,8 @@ func main() {
 	}
 	log.Println("Database connection established")
 
-	// Verify required columns exist (prevents escalation/status-history failures from schema lag)
-	schema.ValidateRequiredColumns(db, nil)
+	// Ensure complaint_status_history table and required columns exist (auto-migration; no data dropped)
+	schema.EnsureComplaintStatusHistory(db)
 
 	// Initialize repositories
 	complaintRepo := repository.NewComplaintRepository(db)
