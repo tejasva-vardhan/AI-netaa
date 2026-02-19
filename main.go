@@ -127,8 +127,8 @@ func main() {
 	}
 	log.Println("Database connection established")
 
-	// Ensure complaint_status_history table and required columns exist (auto-migration; no data dropped)
-	schema.EnsureComplaintStatusHistory(db)
+	// Safe DB init: create only missing tables (users, complaints, complaint_status_history), then ensure columns
+	schema.InitializeDatabase(db)
 
 	// Initialize repositories
 	complaintRepo := repository.NewComplaintRepository(db)
