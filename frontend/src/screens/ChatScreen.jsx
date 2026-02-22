@@ -119,6 +119,10 @@ function ChatScreen() {
 
   // HARD STEP TRANSITION FUNCTION - ONLY entry point for step changes
   const goToStep = (nextStep, options = {}) => {
+    // No step changes while submitting or after completed
+    if ((stage === 'submitting' || stage === 'completed') && !options.force) {
+      return;
+    }
     // Prevent concurrent transitions
     if (stepTransitionLockRef.current) {
       return;
@@ -255,6 +259,10 @@ function ChatScreen() {
         isStepProcessingRef.current = false;
         break;
 
+      case 'voice':
+        isStepProcessingRef.current = false;
+        break;
+
       case 'phone-verify-prompt':
         if (complaintData.photo && complaintData.location && !phoneVerified && !waitingForPhoneVerification) {
           addMessage({
@@ -287,12 +295,60 @@ function ChatScreen() {
   const handleSend = async () => {
     if (!inputText.trim() || isProcessing || isSubmitting) return;
     if (isStepProcessingRef.current) return;
+    // No input handling after submit started or flow completed
+    if (stage === 'submitting' || stage === 'completed') return;
 
     const raw = inputText.trim();
     const normalized = raw.toLowerCase();
+    const currentStep = complaintData.step || 'summary';
 
-    // CONFIRMATION: never treat yes/haan/correct as complaint text; never echo "Aap keh rahe hain ki: yes"
-    const isConfirming = stage === 'confirming' || complaintData.step === 'confirmation' || waitingForConfirmation;
+    // PHOTO STEP: accept image (handled elsewhere) or text skip/yes/no → move to voice
+    if (currentStep === 'photo') {
+      addMessage({ type: 'user', text: raw, timestamp: new Date() });
+      setInputText('');
+      const wantSkip = /^(skip|no|nahi|na|yes|haan|han|sahi|theek|ok)$/.test(normalized) || normalized === 'n' || normalized === 'h';
+      if (wantSkip) {
+        markStepCompleted('photo');
+        updateComplaintData({ photo: { skipped: true } });
+        addMessage({
+          type: 'bot',
+          text: `${getRandomPhrase('acknowledge')}, aage badhte hain.`,
+          timestamp: new Date()
+        });
+        goToStep('voice');
+      } else {
+        addMessage({
+          type: 'bot',
+          text: "Photo bhej sakte hain, ya 'skip' likh dijiye.",
+          timestamp: new Date()
+        });
+      }
+      return;
+    }
+    // VOICE STEP: accept audio (handled elsewhere) or text skip/yes/no → move to confirmation
+    if (currentStep === 'voice') {
+      addMessage({ type: 'user', text: raw, timestamp: new Date() });
+      setInputText('');
+      const wantSkip = /^(skip|no|nahi|na|yes|haan|han|sahi|theek|ok)$/.test(normalized) || normalized === 'n' || normalized === 'h';
+      if (wantSkip) {
+        addMessage({
+          type: 'bot',
+          text: `${getRandomPhrase('acknowledge')}, ab aapki complaint confirm karte hain.`,
+          timestamp: new Date()
+        });
+        goToStep('confirmation');
+      } else {
+        addMessage({
+          type: 'bot',
+          text: "Voice message bhejna chahte hain ya 'skip' likh dijiye.",
+          timestamp: new Date()
+        });
+      }
+      return;
+    }
+
+    // CONFIRMATION ONLY: yes/no as confirm/reject only when stage or step is confirmation (no global yes/no)
+    const isConfirming = stage === 'confirming' || currentStep === 'confirmation';
     const isYes = /^(haan|han|yes|sahi|theek|ok|correct|bilkul|sahi hai)$/.test(normalized);
     const isNo = /^(nahi|na|no|galat|n)$/.test(normalized) || normalized.includes('galat') || normalized.includes('change') || normalized.includes('badal') || normalized.includes('edit');
     if (isConfirming) {
@@ -658,6 +714,13 @@ function ChatScreen() {
     // Never treat confirmation-step input as complaint text (yes/haan handled in handleSend)
     if (currentStep === 'confirmation') {
       return { text: 'Bas haan bol dijiye, main aage badhata hoon.', updateData: {} };
+    }
+    // photo/voice: prompt only (skip/yes/no handled in handleSend)
+    if (currentStep === 'photo') {
+      return { text: "Photo bhej sakte hain, ya 'skip' likh dijiye.", updateData: {} };
+    }
+    if (currentStep === 'voice') {
+      return { text: "Voice message bhejna chahte hain ya 'skip' likh dijiye.", updateData: {} };
     }
     
     // Step-based flow logic
