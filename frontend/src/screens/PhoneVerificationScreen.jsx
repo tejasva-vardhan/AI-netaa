@@ -6,7 +6,7 @@ import './PhoneVerificationScreen.css';
 
 function PhoneVerificationScreen() {
   const navigate = useNavigate();
-  const { complaintData, updateComplaintData } = useComplaintState();
+  const { complaintData, updateComplaintData, addMessage } = useComplaintState();
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState('phone'); // 'phone' | 'otp' | 'verifying'
@@ -118,22 +118,15 @@ function PhoneVerificationScreen() {
     setError(null);
 
     try {
-      // Send OTP - backend returns OTP in dev mode
       const response = await api.sendOTP(cleanPhone);
-      
-      console.log('[DEBUG] PhoneVerificationScreen received response:', response);
-      
-      // Store OTP in localStorage for display (dev mode only)
-      if (import.meta.env.DEV && response.otp) {
-        console.log('[DEBUG] Storing OTP in localStorage:', response.otp);
-        localStorage.setItem(`dev_otp_${cleanPhone}`, response.otp);
-      } else if (import.meta.env.DEV) {
-        console.warn('[WARNING] OTP not found in response. Available keys:', Object.keys(response || {}));
+      const otp = response?.debug_otp ?? null;
+      if (otp != null) {
+        addMessage({ type: 'bot', text: `🔐 Demo OTP: ${String(otp)}`, timestamp: new Date() });
+        setOtp(String(otp).replace(/\D/g, '').slice(0, 6));
       }
-      
       setOtpSent(true);
       setStep('otp');
-      setCountdown(60); // 60 second countdown
+      setCountdown(60);
       setLoading(false);
     } catch (err) {
       setError(err.message || 'OTP भेजने में समस्या / Failed to send OTP. Please try again.');
@@ -252,9 +245,15 @@ function PhoneVerificationScreen() {
     setError(null);
     
     try {
-      await api.sendOTP(cleanPhone);
+      const response = await api.sendOTP(cleanPhone);
+      const otp = response?.debug_otp ?? null;
+      if (otp != null) {
+        addMessage({ type: 'bot', text: `🔐 Demo OTP: ${String(otp)}`, timestamp: new Date() });
+        setOtp(String(otp).replace(/\D/g, '').slice(0, 6));
+      } else {
+        setOtp('');
+      }
       setCountdown(60);
-      setOtp('');
       setError(null);
       setLoading(false);
     } catch (err) {
@@ -316,42 +315,6 @@ function PhoneVerificationScreen() {
               <p className="otp-sent-message">
                 OTP sent to {phone.replace(/(\d{2})(\d{4})(\d{4})/, '$1****$2')}
               </p>
-              {/* Development mode: Show OTP if available */}
-              {import.meta.env.DEV && (() => {
-                // Try to get OTP from localStorage (stored by api.js after sendOTP)
-                const cleanPhone = phone.replace(/\D/g, '');
-                const storedOTP = localStorage.getItem(`dev_otp_${cleanPhone}`);
-                return storedOTP ? (
-                  <p className="dev-otp-hint" style={{ 
-                    fontSize: '14px', 
-                    color: 'var(--primary-color)', 
-                    fontWeight: '600',
-                    marginTop: '8px',
-                    padding: '12px',
-                    background: 'var(--background)',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border)'
-                  }}>
-                    Dev: OTP = <strong>{storedOTP}</strong>
-                    <br />
-                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      (Console for details)
-                    </span>
-                  </p>
-                ) : (
-                  <p className="dev-otp-hint" style={{ 
-                    fontSize: '12px', 
-                    color: 'var(--error-color)', 
-                    marginTop: '8px',
-                    padding: '8px',
-                    background: '#FEF2F2',
-                    borderRadius: '6px',
-                    border: '1px solid #FECACA'
-                  }}>
-                    Dev: Check console for OTP. Backend prints [PILOT MODE] OTP for {phone.replace(/(\d{2})(\d{4})(\d{4})/, '$1****$2')}.
-                  </p>
-                );
-              })()}
               <input
                 id="otp"
                 type="text"

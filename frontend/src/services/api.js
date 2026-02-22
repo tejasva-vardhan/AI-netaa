@@ -316,20 +316,17 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ phone_number: phoneNumber })
       });
-      
-      // DEV MODE: Backend returns OTP in response for testing
-      console.log('[DEBUG] sendOTP response:', response);
-      if (import.meta.env.DEV && response.otp) {
-        console.log('\n========================================');
-        console.log('✅ [DEV MODE] OTP CODE:', response.otp);
-        console.log('Phone:', phoneNumber);
-        console.log('========================================\n');
-      } else if (import.meta.env.DEV) {
-        console.warn('[WARNING] OTP not found in response. Response keys:', Object.keys(response));
-        console.log('[INFO] OTP sent. Check backend console/terminal for the OTP code.');
-        console.log('[INFO] Backend will print: [PILOT MODE] OTP for <phone>: <code>');
+
+      const debugOtp = response?.debug_otp ?? response?.otp;
+      if (debugOtp != null) {
+        console.log('[OTP DEBUG]', debugOtp);
       }
-      
+      if (import.meta.env.DEV && response?.otp) {
+        console.log('✅ [DEV MODE] OTP CODE:', response.otp);
+      } else if (import.meta.env.DEV && !debugOtp) {
+        console.log('[INFO] OTP sent. Check backend console for [OTP DEBUG].');
+      }
+
       return response;
     } catch (err) {
       // ISSUE 4: Remove fake fallbacks - backend MUST be available

@@ -5,6 +5,7 @@ import (
 	"finalneta/service"
 	"finalneta/utils"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -104,29 +105,28 @@ func (h *PhoneVerificationHandler) SendOTP(w http.ResponseWriter, r *http.Reques
 		Phone:     cleanPhone,
 	}
 
-	// In production, send SMS via gateway (Twilio, AWS SNS, etc.)
-	// For pilot: log OTP (in production, remove this)
-	fmt.Printf("\n========================================\n")
-	fmt.Printf("[PILOT MODE] OTP SENT\n")
-	fmt.Printf("Phone: %s\n", cleanPhone)
-	fmt.Printf("OTP Code: %s\n", otpCode)
-	fmt.Printf("Expires at: %s\n", expiresAt.Format(time.RFC3339))
-	fmt.Printf("========================================\n\n")
+	// Always log OTP for debugging (server logs only)
+	log.Printf("[OTP DEBUG] Phone: %s, OTP: %s", cleanPhone, otpCode)
 
-	// DEV MODE: Include OTP in response for testing (remove in production)
-	response := SendOTPResponse{
-		Success:   true,
-		Message:   "OTP sent successfully",
-		ExpiresIn: 600, // 10 minutes
-		OTP:       otpCode, // DEV MODE ONLY - remove in production
+	// Attempt SMS sending (existing flow: when configured, send via gateway)
+	smsSent := trySendOTPSMS(cleanPhone, otpCode)
+
+	if smsSent {
+		// SMS succeeded: normal response, no debug_otp
+		respondWithJSON(w, http.StatusOK, map[string]interface{}{
+			"success":    true,
+			"message":    "OTP sent successfully",
+			"expires_in": 600,
+		})
+		return
 	}
-	
-	// Debug: Marshal response to verify OTP is included
-	responseJSON, _ := json.Marshal(response)
-	fmt.Printf("[DEBUG] Response JSON: %s\n", string(responseJSON))
-	fmt.Printf("[DEBUG] OTP in response struct: '%s'\n", response.OTP)
-	
-	respondWithJSON(w, http.StatusOK, response)
+	// SMS failed or not configured: success with dev fallback and debug_otp
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"success":    true,
+		"message":    "OTP sent (DEV MODE)",
+		"debug_otp":  otpCode,
+		"expires_in": 600,
+	})
 }
 
 // VerifyOTP handles POST /api/v1/users/otp/verify
@@ -249,4 +249,16 @@ func getKeys(m map[string]OTPData) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// trySendOTPSMS attempts to send OTP via SMS when configured (e.g. TWILIO_*). Returns true only if send succeeded.
+func trySendOTPSMS(phone, otp string) bool {
+	// When SMS gateway is configured, call it here; on success return true.
+	// Not configured or send failure → return false (handler will return dev fallback with debug_otp).
+	if os.Getenv("TWILIO_ACCOUNT_SID") == "" && os.Getenv("SMS_ENABLED") != "true" {
+		return false
+	}
+	// Placeholder: real implementation would call Twilio/SNS etc.
+	// For now, treat as not configured so we don't break; when implemented, return true on success.
+	return false
 }

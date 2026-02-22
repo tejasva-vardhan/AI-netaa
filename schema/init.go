@@ -48,6 +48,49 @@ func InitializeDatabase(db *sql.DB) {
 
 	// Fix missing columns on complaint_status_history (actor_type, actor_id, reason)
 	EnsureComplaintStatusHistory(db)
+
+	// 4. escalation_rules (minimal safe init if missing)
+	if exists, err := tableExists(db, "escalation_rules"); err != nil {
+		log.Fatalf("[SCHEMA] Failed to check if table escalation_rules exists: %v", err)
+	} else if !exists {
+		createEscalationRulesTable(db)
+		log.Println("[SCHEMA] created escalation_rules table")
+	}
+
+	// 5. notifications_log (minimal safe init if missing)
+	if exists, err := tableExists(db, "notifications_log"); err != nil {
+		log.Fatalf("[SCHEMA] Failed to check if table notifications_log exists: %v", err)
+	} else if !exists {
+		createNotificationsLogTable(db)
+		log.Println("[SCHEMA] created notifications_log table")
+	}
+}
+
+func createEscalationRulesTable(db *sql.DB) {
+	q := `
+CREATE TABLE IF NOT EXISTS escalation_rules (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    complaint_type VARCHAR(255) NULL,
+    escalation_time INT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+	if _, err := db.Exec(q); err != nil {
+		log.Fatalf("[SCHEMA] Failed to create table escalation_rules: %v", err)
+	}
+}
+
+func createNotificationsLogTable(db *sql.DB) {
+	q := `
+CREATE TABLE IF NOT EXISTS notifications_log (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NULL,
+    message TEXT NULL,
+    status VARCHAR(50) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+	if _, err := db.Exec(q); err != nil {
+		log.Fatalf("[SCHEMA] Failed to create table notifications_log: %v", err)
+	}
 }
 
 func createUsersTable(db *sql.DB) {
