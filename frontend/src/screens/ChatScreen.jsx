@@ -27,6 +27,7 @@ function ChatScreen() {
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [stage, setStage] = useState('initial'); // initial | collecting_details | confirming | submitting | completed
   const [waitingForConfirmation, setWaitingForConfirmation] = useState(false);
   const [waitingForDescriptionConfirmation, setWaitingForDescriptionConfirmation] = useState(false);
   const [waitingForLocationConfirmation, setWaitingForLocationConfirmation] = useState(false);
@@ -152,6 +153,13 @@ function ChatScreen() {
       
       // Update state
       updateComplaintData({ step: nextStep });
+
+      // Stage: collecting_details for any step before confirmation; initial only on force restart
+      if (options.force && nextStep === 'summary') {
+        setStage('initial');
+      } else if (['summary', 'description', 'description_confirm', 'location', 'location_confirm', 'location-confirmation', 'photo', 'voice'].includes(nextStep)) {
+        setStage('collecting_details');
+      }
 
       // Execute step logic
       executeStep(nextStep, options);
@@ -283,10 +291,44 @@ function ChatScreen() {
     const raw = inputText.trim();
     const normalized = raw.toLowerCase();
 
+    // CONFIRMATION: never treat yes/haan/correct as complaint text; never echo "Aap keh rahe hain ki: yes"
+    const isConfirming = stage === 'confirming' || complaintData.step === 'confirmation' || waitingForConfirmation;
+    const isYes = /^(haan|han|yes|sahi|theek|ok|correct|bilkul|sahi hai)$/.test(normalized);
+    const isNo = /^(nahi|na|no|galat|n)$/.test(normalized) || normalized.includes('galat') || normalized.includes('change') || normalized.includes('badal') || normalized.includes('edit');
+    if (isConfirming) {
+      const userMessage = { type: 'user', text: raw, timestamp: new Date() };
+      addMessage(userMessage);
+      setInputText('');
+      if (isYes) {
+        setWaitingForConfirmation(false);
+        setStage('submitting');
+        await submitComplaint();
+        return;
+      }
+      if (isNo) {
+        setWaitingForConfirmation(false);
+        setStage('collecting_details');
+        setExpectingCorrection(true);
+        addMessage({
+          type: 'bot',
+          text: `${getRandomPhrase('acknowledge')}, bata dijiye kya sahi hai.`,
+          timestamp: new Date()
+        });
+        return;
+      }
+      addMessage({
+        type: 'bot',
+        text: 'Bas haan bol dijiye, main aage badhata hoon.',
+        timestamp: new Date()
+      });
+      return;
+    }
+
     // Hidden reset: user says "restart"
     if (normalized === 'restart') {
       setInputText('');
       setIsProcessing(true);
+      setStage('initial');
       setWaitingForConfirmation(false);
       setWaitingForDescriptionConfirmation(false);
       setWaitingForLocationConfirmation(false);
@@ -463,33 +505,6 @@ function ChatScreen() {
       return;
     }
 
-    // Handle final confirmation response (for submission)
-    if (waitingForConfirmation) {
-      const userMessage = { type: 'user', text: raw, timestamp: new Date() };
-      addMessage(userMessage);
-      setInputText('');
-      
-      if (normalized === 'haan' || normalized === 'han' || normalized === 'yes' || normalized === 'sahi' || normalized === 'theek' || normalized === 'ok') {
-        setWaitingForConfirmation(false);
-        await submitComplaint();
-      } else if (normalized === 'nahi' || normalized === 'na' || normalized === 'no' || normalized === 'galat' || normalized.includes('galat') || normalized.includes('change') || normalized.includes('badal') || normalized.includes('edit')) {
-        setWaitingForConfirmation(false);
-        setExpectingCorrection(true);
-        addMessage({
-          type: 'bot',
-          text: `${getRandomPhrase('acknowledge')}, bata dijiye kya sahi hai.`,
-          timestamp: new Date()
-        });
-      } else {
-        addMessage({
-          type: 'bot',
-          text: 'Bas haan bol dijiye, main aage badhata hoon.',
-          timestamp: new Date()
-        });
-      }
-      return;
-    }
-
     const userMessage = { type: 'user', text: raw, timestamp: new Date() };
     addMessage(userMessage);
     setInputText('');
@@ -639,6 +654,11 @@ function ChatScreen() {
   const getBotResponse = (userText) => {
     const currentStep = complaintData.step || 'summary';
     const completedSteps = new Set(complaintData.completedSteps || []);
+
+    // Never treat confirmation-step input as complaint text (yes/haan handled in handleSend)
+    if (currentStep === 'confirmation') {
+      return { text: 'Bas haan bol dijiye, main aage badhata hoon.', updateData: {} };
+    }
     
     // Step-based flow logic
     if (currentStep === 'summary' && !completedSteps.has('summary')) {
@@ -838,6 +858,7 @@ Kya yeh sahi hai?`;
     });
     
     setWaitingForConfirmation(true);
+    setStage('confirming');
     updateComplaintData({ step: 'confirmation' });
   };
 
@@ -922,39 +943,15 @@ Kya yeh sahi hai?`;
       const response = await api.createComplaint(complaintDataWithCategory);
       
       const complaintNumber = response.complaint_number || response.complaint_id;
+      const idDisplay = complaintNumber || response.complaint_id || '—';
       
       addMessage({
         type: 'bot',
-        text: 'Ho gaya 👍',
+        text: `✅ Aapki complaint register ho gayi hai (ID: ${idDisplay})\nRelevant department ko bhej di gayi hai.`,
         timestamp: new Date()
       });
       
-      addMessage({
-        type: 'bot',
-        text: 'Maine aapki problem sahi adhikari tak pahucha di hai.',
-        timestamp: new Date()
-      });
-      
-      addMessage({
-        type: 'bot',
-        text: 'Is par action liya jayega.',
-        timestamp: new Date()
-      });
-      
-      addMessage({
-        type: 'bot',
-        text: 'Aapko updates milte rahenge.',
-        timestamp: new Date()
-      });
-      
-      if (complaintNumber) {
-        addMessage({
-          type: 'bot',
-          text: `Complaint ID: ${complaintNumber}`,
-          timestamp: new Date()
-        });
-      }
-      
+      setStage('completed');
       clearComplaintData({ keepConversation: true });
       setIsSubmitting(false);
       
@@ -996,7 +993,8 @@ Kya yeh sahi hai?`;
         timestamp: new Date()
       });
       setIsSubmitting(false);
-      setWaitingForConfirmation(false);
+      setWaitingForConfirmation(true);
+      setStage('confirming');
     }
   };
 
@@ -1036,7 +1034,7 @@ Kya yeh sahi hai?`;
             value={inputText}
             onChange={setInputText}
             onSend={handleSend}
-            disabled={isProcessing || isSubmitting || waitingForDescriptionConfirmation || waitingForLocationConfirmation || waitingForPhoneVerification || waitingForLocationChoice || isStepProcessingRef.current}
+            disabled={isProcessing || isSubmitting}
             placeholder="Type your message..."
           />
         </div>
