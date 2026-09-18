@@ -1,28 +1,26 @@
 # AI Neta
 
-Student project: a chat UI for civic complaints. A citizen files a complaint; the backend stores it, assigns a department, and raises the ticket L0 to L3 if the SLA is missed.
+Student project: a chat UI for civic complaints. A citizen files a ticket; the backend stores it, assigns a department, and raises the ticket if the SLA is missed.
 
-Stack: Go API, React frontend, MySQL. Phone OTP for citizens. Officers get a dashboard for assigned tickets. Escalation is time-based, not a language-model judge.
+Stack: Go API at the repository root, React frontend, MySQL. Escalation is a time-based worker, not a language-model judge. Phone OTP is a local demo (no SMS provider).
 
-This is coursework/personal software, not a deployed city system.
+This is coursework, not a deployed city system.
 
 ## What it does
 
-- Citizen: chat form, optional photo/voice/GPS, status timeline, public case page (no personal data on the public page)
-- Officer: login, assigned queue, status updates with a reason, internal notes
-- System: L0 to L3 escalation worker, email log (shadow mode can send all mail to one inbox)
+- Citizen: chat form, photo, voice, GPS, status timeline, and a public case page with no personal data
+- Officer: login, assigned queue, and status updates with a reason
+- System: department routing and L1–L3 SLA escalation
 
 ## Layout
 
-- `backend/` — Go HTTP API, workers, MySQL migrations
+- Repository root — Go HTTP API, workers, MySQL schema
 - `frontend/` — React + Vite
-- `docs/` — extra notes
+- `migrations/` — SQL migrations
 
 ## Run locally
 
 Needs Go 1.21+, Node 18+, MySQL 5.7+ (or MariaDB).
-
-### Backend
 
 ```bash
 git clone https://github.com/tejasva-vardhan/AI-netaa.git
@@ -50,8 +48,6 @@ go run .
 
 API: http://localhost:8080
 
-### Frontend
-
 ```bash
 cd frontend
 npm install
@@ -66,8 +62,6 @@ VITE_API_BASE_URL=http://localhost:8080/api/v1
 ```bash
 npm run dev
 ```
-
-UI: http://localhost:3000 (or the next free port)
 
 Do not commit `.env` files.
 

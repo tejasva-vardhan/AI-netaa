@@ -20,6 +20,7 @@ go.work
 # IDE
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 *~
