@@ -1,63 +1,85 @@
 # AI Neta
 
-Student project: a chat-style civic complaint system. A resident describes a problem, the backend stores a ticket, assigns a department by **category rules**, and a worker raises the ticket if nobody updates it in time.
+A civic-complaint app: residents file issues in a chat UI, officers work a queue, and a background worker raises the ticket if the SLA is missed.
 
-Routing is not an LLM. Escalation is not an LLM. Phone OTP is a **local demo** (in-memory code, no SMS provider). This is coursework, not a deployed city system.
+Citizens describe the problem, attach photo / voice / GPS, and get a tracking number. The backend stores the ticket in MySQL, assigns a department from **category rules** (not a language model), and exposes a public case page with no personal fields. Officers log in separately, change status with a reason, and see only assigned tickets.
 
-Demo UI: https://ai-netaa.vercel.app
+Live UI: https://ai-netaa.vercel.app
 
-## What a ticket does
+Phone OTP is a local demo (in-memory code, no SMS gateway). Escalation is time-based SQL rules, not an LLM judge.
 
-**Citizen (React chat)**
+## How a complaint moves
 
-1. Describe the issue in chat. Optional photo, voice note, and GPS on the filing screens.
-2. The UI infers a category (infrastructure, water, electricity, sanitation, health, …) with keyword rules in `frontend/src/utils/categoryInference.js`.
-3. `POST` creates the complaint in MySQL. The handler currently requires photo and GPS even if the UI lets you skip them.
-4. Phone OTP (`POST /api/v1/users/otp/send` and `/verify`) is demo-only; the server can return `debug_otp`.
-5. The citizen can watch a status timeline. A **public** page `/case/:complaintNumber` shows the case without phone, GPS, or officer notes.
+```
+Chat / camera / GPS
+        │
+        ▼
+  Go API  ── MySQL ──  officer dashboard
+        │
+        ├── keyword category → department (PWD, water, electricity, …)
+        ├── JWT citizen auth; separate authority JWT
+        └── escalation worker (L1 → L2 at 72h, L2 → L3 at 120h)
+```
 
-**Officer dashboard**
+1. **Intake** — `ChatScreen` plus optional `CameraScreen`, `LocationScreen`, `PhoneVerificationScreen`.
+2. **Category** — `frontend/src/utils/categoryInference.js` (regex / keywords). Backend `department_repository.go` maps category → department id, then location / collector fallback.
+3. **Create** — `POST /api/v1/complaints`. The API currently requires photo and GPS even if the UI can skip those steps.
+4. **Citizen follow-up** — list, detail, status timeline, voice upload.
+5. **Public** — `/case/:complaintNumber` and `GET /api/v1/public/complaints/by-number/{n}` omit phone, GPS, and officer notes.
+6. **Officer** — `/authority/login`, assigned queue, `POST .../status` with a reason. Notes: `POST .../note` exists on the API only (no UI yet).
+7. **SLA** — `worker/escalation_worker.go` ticks on an interval, applies `seed_escalation_rules_sla.sql`. Email goes through shadow mode (one inbox) so the pilot does not mail real departments.
 
-- Login, assigned queue, status change with a mandatory reason.
-- Internal notes exist as `POST /authority/complaints/{id}/note` on the API; there is no notes control in the officer UI yet.
+## Features
 
-**SLA worker** (`worker/escalation_worker.go`)
-
-- Runs on a timer, not on each HTTP request.
-- Levels in SQL are **L1 → L2 → L3** (72 hours then 120 hours in `seed_escalation_rules_sla.sql`).
-- If the ticket is not updated, the worker raises the level. Email is logged in shadow mode (can send everything to one inbox).
-
-**Department assignment** (`repository/department_repository.go`)
-
-Category switch, for example infrastructure → PWD, water → water board, electricity → electricity dept, then location / collector fallback. Not model-based routing.
+- Chat-first filing with photo, voice, GPS
+- Offline retry queue in the frontend (`utils/offlineQueue.js`)
+- Officer dashboard (login, queue, status + reason)
+- Public case page
+- Escalation L1 / L2 / L3
+- Health check at `/health`
 
 ## Stack
 
-- API: Go (`main.go` at repo root), Gorilla mux, MySQL
-- UI: React 18, Vite (`frontend/`)
-- Background: escalation worker + notification worker
-- Auth: JWT for citizens; separate authority login for officers
+| Layer | Tech |
+|---|---|
+| API | Go, Gorilla mux, JWT |
+| DB | MySQL |
+| Workers | Go goroutines (`worker/`) |
+| Frontend | React 18, Vite, React Router |
+| Hosting | API anywhere that runs Go; UI on Vercel |
+
+## HTTP (`/api/v1`)
+
+**Citizens**
+
+- `POST /users/otp/send`, `POST /users/otp/verify`
+- `GET/POST /complaints`, `GET /complaints/{id}`, `GET /complaints/{id}/timeline`
+- `POST /complaints/{id}/voice`
+
+**Officers** (`/authority`)
+
+- `POST /login`, `GET /me`, `GET /complaints`
+- `POST /complaints/{id}/status`, `POST /complaints/{id}/note`
+
+**Public**
+
+- `GET /public/complaints/by-number/{complaint_number}`
 
 ## Layout
 
 ```
-main.go, handler/, service/, repository/, routes/
-worker/           Escalation and notification loops
-migrations/       Ordered SQL (0001–0006)
-seed_*.sql        Pilot officers and SLA rules
-frontend/         Chat, camera, location, officer screens, public case page
+main.go                 process entry (DB, workers, HTTP)
+handler/ service/ repository/ routes/ models/
+worker/                 escalation + notifications
+migrations/             0001–0006
+seed_*.sql              pilot officers and SLA hours
+frontend/src/screens/   citizen + officer + public UI
+frontend/src/pages/     login / signup / tracker (older routes still mounted)
 ```
-
-## HTTP (prefix `/api/v1`)
-
-- Citizens: complaints CRUD, timeline, voice upload, OTP
-- Officers: `/authority/login`, `/authority/complaints`, status update
-- Public: `/public/complaints/by-number/{complaint_number}`
-- Health: `/health`
 
 ## Run locally
 
-Needs Go 1.21+, Node 18+, MySQL 5.7+ (or MariaDB).
+Go 1.21+, Node 18+, MySQL 5.7+ or MariaDB.
 
 ```bash
 git clone https://github.com/tejasva-vardhan/AI-netaa.git
@@ -65,7 +87,7 @@ cd AI-netaa
 go mod download
 ```
 
-Create `.env`:
+`.env`:
 
 ```
 DB_HOST=localhost
@@ -77,17 +99,11 @@ SERVER_PORT=8080
 JWT_SECRET=change-me
 ```
 
-Apply `migrations/0001` through `0006`, then seed files if you want the pilot officers and SLA rules.
+Apply `migrations/0001` … `0006`, then the `seed_*.sql` files for the pilot officers and SLA rules.
 
 ```bash
-go run .
-```
-
-API: http://localhost:8080
-
-```bash
-cd frontend
-npm install
+go run .                 # API :8080
+cd frontend && npm install && npm run dev
 ```
 
 `frontend/.env`:
@@ -96,12 +112,8 @@ npm install
 VITE_API_BASE_URL=http://localhost:8080/api/v1
 ```
 
-```bash
-npm run dev
-```
-
 Do not commit `.env` files.
 
-## Author
+## License
 
-Tejasva Vardhan Sharma
+MIT.
